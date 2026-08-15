@@ -34,6 +34,17 @@ npm run dev        # watch mode
 npm run build && npm start
 ```
 
+## Test without a live match
+
+Keep `DRY_RUN=true`. In one terminal run the worker, in another seed a fake Saka goal:
+
+```bash
+npm run dev
+npm run seed:test-goal
+```
+
+The script inserts a test fixture (`provider_match_id` 999000001), a `CONFIRMED` match event, and a `content-generation` job. Watch the worker logs for commentary and `DRY RUN — post not sent to X`, then check `match_events` and `content_generations` in Supabase. `published_posts` should stay empty.
+
 ## Safety defaults
 
 The worker boots in the safest possible configuration:
