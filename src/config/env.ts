@@ -19,7 +19,7 @@ const EnvSchema = z.object({
   SPORTSAPI_WS_URL: z.string().url().default('wss://api.sportsapipro.com/v2/football/ws'),
 
   SUPABASE_URL: z.string().url(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  SUPABASE_SECRET_KEY: z.string().min(1),
   SUPABASE_DB_URL: z.string().min(1),
   SUPABASE_STORAGE_BUCKET: z.string().default(''),
 
@@ -27,10 +27,10 @@ const EnvSchema = z.object({
   OPENAI_TEXT_MODEL: z.string().default('gpt-5.6-luna'),
   OPENAI_IMAGE_MODEL: z.string().default('gpt-image-2'),
 
-  X_CLIENT_ID: z.string().min(1),
-  X_CLIENT_SECRET: z.string().min(1),
-  X_REFRESH_TOKEN: z.string().min(1),
-  X_API_BASE_URL: z.string().url().default('https://api.x.com'),
+  TWITTER_CONSUMER_KEY: z.string().min(1),
+  TWITTER_CONSUMER_SECRET: z.string().min(1),
+  TWITTER_ACCESS_TOKEN: z.string().min(1),
+  TWITTER_ACCESS_SECRET: z.string().min(1),
 
   MAX_POSTS_PER_15_MIN: z.coerce.number().int().positive().default(12),
   MAX_POSTS_PER_DAY: z.coerce.number().int().positive().default(100),
@@ -49,7 +49,17 @@ let cached: Env | undefined;
  */
 export function loadEnv(): Env {
   if (cached) return cached;
-  const parsed = EnvSchema.safeParse(process.env);
+  const parsed = EnvSchema.safeParse({
+    ...process.env,
+    TWITTER_CONSUMER_KEY:
+      process.env.TWITTER_CONSUMER_KEY || process.env.X_API_KEY,
+    TWITTER_CONSUMER_SECRET:
+      process.env.TWITTER_CONSUMER_SECRET || process.env.X_API_SECRET,
+    TWITTER_ACCESS_TOKEN:
+      process.env.TWITTER_ACCESS_TOKEN || process.env.X_ACCESS_TOKEN,
+    TWITTER_ACCESS_SECRET:
+      process.env.TWITTER_ACCESS_SECRET || process.env.X_ACCESS_TOKEN_SECRET,
+  });
   if (!parsed.success) {
     const problems = parsed.error.issues
       .map(issue => `  - ${issue.path.join('.')}: ${issue.message}`)

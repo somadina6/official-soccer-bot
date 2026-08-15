@@ -12,7 +12,7 @@ Built from `premier-league-ai-twitter-bot-implementation-plan.md`.
 - **Supabase Queues (pgmq)** — durable jobs with retries and dead-lettering
 - **OpenAI** — structured-output commentary + pre-generated fixture artwork
 - **sharp** — deterministic score/minute overlay composition
-- **X API v2** — media upload, alt text and post creation (OAuth 2.0 PKCE)
+- **X API v2** — media upload, alt text and post creation via `twitter-api-v2` (OAuth 1.0a user context)
 
 ## Getting started
 
@@ -26,7 +26,7 @@ cp .env.example .env   # fill in real values; placeholders included
    - `src/supabase/migrations/0001_init.sql` (tables, RLS, seeds)
    - `src/supabase/migrations/0002_queues.sql` (the six logged Basic Queues)
 3. Optionally create a private Storage bucket named `generated-match-media` (or clear `SUPABASE_STORAGE_BUCKET` to stream images directly to X).
-4. Complete the X OAuth 2.0 Authorization Code + PKCE flow once for the bot account (scopes `tweet.read tweet.write users.read offline.access`) and put the refresh token in `X_REFRESH_TOKEN`. Rotated refresh tokens are persisted automatically in `account_settings`.
+4. Copy the bot account's OAuth 1.0a user tokens into `TWITTER_CONSUMER_KEY`, `TWITTER_CONSUMER_SECRET`, `TWITTER_ACCESS_TOKEN` and `TWITTER_ACCESS_SECRET` (same names as `twitter-api-v2`). The access token must have read and write permission.
 5. Start the worker:
 
 ```bash

@@ -1,5 +1,5 @@
-import { loadEnv } from '../../config/env.js';
-import { getBotUserAccessToken } from './auth.js';
+import { ApiResponseError, type SendTweetV2Params } from 'twitter-api-v2';
+import { getXClient } from './auth.js';
 
 export type CreatePostInput = {
   text: string;
@@ -13,25 +13,22 @@ export type CreatePostInput = {
  * every post carries AI-generated media.
  */
 export async function createPost(input: CreatePostInput): Promise<string> {
-  const env = loadEnv();
-  const body: Record<string, unknown> = {
+  const payload: SendTweetV2Params & { made_with_ai: true } = {
     text: input.text,
     made_with_ai: true,
   };
-  if (input.mediaId) body.media = { media_ids: [input.mediaId] };
-  if (input.inReplyToPostId) body.reply = { in_reply_to_tweet_id: input.inReplyToPostId };
+  if (input.mediaId) payload.media = { media_ids: [input.mediaId] };
+  if (input.inReplyToPostId) payload.reply = { in_reply_to_tweet_id: input.inReplyToPostId };
 
-  const response = await fetch(`${env.X_API_BASE_URL}/2/tweets`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${await getBotUserAccessToken()}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(`X ${response.status}: ${await response.text()}`);
-
-  const json = (await response.json()) as { data?: { id?: string } };
-  if (!json.data?.id) throw new Error('X post creation returned no post ID');
-  return json.data.id;
+  try {
+    const posted = await getXClient().v2.tweet(payload);
+    const id = posted.data?.id;
+    if (!id) throw new Error('X post creation returned no post ID');
+    return id;
+  } catch (error) {
+    if (error instanceof ApiResponseError) {
+      throw new Error(`X ${error.code}: ${error.message}`);
+    }
+    throw error;
+  }
 }
