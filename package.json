@@ -1,0 +1,37 @@
+{
+  "name": "official-soccer-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Premier League AI commentary bot: detects live match events, generates commentary + AI artwork, and publishes to X.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@sentry/node": "^8.0.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "fastify": "^5.0.0",
+    "openai": "^4.60.0",
+    "pg": "^8.12.0",
+    "pino": "^9.4.0",
+    "sharp": "^0.33.5",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/pg": "^8.11.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
