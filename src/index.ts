@@ -78,6 +78,7 @@ async function startWorker(): Promise<void> {
 }
 
 void startWorker().catch(error => {
+  console.error(error);
   logger.fatal({ error }, 'worker boot failed');
   process.exitCode = 1;
 });

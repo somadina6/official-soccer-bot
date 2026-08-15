@@ -1,10 +1,11 @@
-import pg from 'pg';
-import { loadEnv } from '../config/env.js';
-import { logger } from '../observability/logger.js';
+import { getSupabase } from '../supabase/client.js';
 
 /**
- * Durable job queues on Supabase Queues (pgmq), consumed over a direct
- * server-side Postgres connection. Queues are never exposed to browsers.
+ * Durable jobs via Supabase Queues (`pgmq_public` RPCs).
+ * https://supabase.com/docs/guides/queues/api
+ *
+ * Called with the server-only secret key. Do not expose these queues to
+ * browsers; `pgmq_public` stays private to the worker.
  */
 
 export const QUEUES = {
@@ -32,14 +33,16 @@ export type ReadMessage = {
   message: QueueMessage;
 };
 
-let pool: pg.Pool | undefined;
+type PgmqReadRow = {
+  msg_id: number | string;
+  read_ct: number;
+  message: QueueMessage;
+};
 
-function getPool(): pg.Pool {
-  if (pool) return pool;
-  const env = loadEnv();
-  pool = new pg.Pool({ connectionString: env.SUPABASE_DB_URL, max: 5 });
-  pool.on('error', err => logger.error({ err }, 'postgres pool error'));
-  return pool;
+async function queueRpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await getSupabase().schema('pgmq_public').rpc(fn, args);
+  if (error) throw new Error(`pgmq_public.${fn} failed: ${error.message}`);
+  return data as T;
 }
 
 export async function sendToQueue(
@@ -47,11 +50,12 @@ export async function sendToQueue(
   message: QueueMessage,
   sleepSeconds = 0,
 ): Promise<number> {
-  const { rows } = await getPool().query<{ send: number }>(
-    'select * from pgmq.send(queue_name => $1, msg => $2::jsonb, delay => $3::int)',
-    [queue, JSON.stringify(message), sleepSeconds],
-  );
-  return rows[0]!.send;
+  const msgId = await queueRpc<number | number[]>('send', {
+    queue_name: queue,
+    message,
+    sleep_seconds: sleepSeconds,
+  });
+  return Array.isArray(msgId) ? Number(msgId[0]) : Number(msgId);
 }
 
 /** Reads up to `qty` messages, hiding them for `visibilityTimeout` seconds. */
@@ -60,16 +64,12 @@ export async function readFromQueue(
   visibilityTimeout = 60,
   qty = 5,
 ): Promise<ReadMessage[]> {
-  const { rows } = await getPool().query<{
-    msg_id: string;
-    read_ct: number;
-    message: QueueMessage;
-  }>('select msg_id, read_ct, message from pgmq.read(queue_name => $1, vt => $2::int, qty => $3::int)', [
-    queue,
-    visibilityTimeout,
-    qty,
-  ]);
-  return rows.map(row => ({
+  const rows = await queueRpc<PgmqReadRow[] | null>('read', {
+    queue_name: queue,
+    sleep_seconds: visibilityTimeout,
+    n: qty,
+  });
+  return (rows ?? []).map(row => ({
     msgId: Number(row.msg_id),
     readCount: row.read_ct,
     message: row.message,
@@ -78,12 +78,12 @@ export async function readFromQueue(
 
 /** Archives a successfully processed message for audit (kept in pgmq archive). */
 export async function archiveMessage(queue: QueueName, msgId: number): Promise<void> {
-  await getPool().query('select pgmq.archive(queue_name => $1, msg_id => $2::bigint)', [queue, msgId]);
+  await queueRpc('archive', { queue_name: queue, message_id: msgId });
 }
 
 /** Deletes a message outright (used after moving it to the dead-letter queue). */
 export async function deleteMessage(queue: QueueName, msgId: number): Promise<void> {
-  await getPool().query('select pgmq.delete(queue_name => $1, msg_id => $2::bigint)', [queue, msgId]);
+  await queueRpc('delete', { queue_name: queue, message_id: msgId });
 }
 
 /** Moves an exhausted job to `dead-letter` and records the failure. */
@@ -98,14 +98,18 @@ export async function deadLetter(
     error,
     attempts: msg.readCount,
   });
-  await getPool().query(
-    'insert into job_failures (queue_name, message, error, attempts) values ($1, $2::jsonb, $3, $4)',
-    [queue, JSON.stringify(msg.message), error, msg.readCount],
-  );
+  const { error: insertError } = await getSupabase().from('job_failures').insert({
+    queue_name: queue,
+    message: msg.message,
+    error,
+    attempts: msg.readCount,
+  });
+  if (insertError) {
+    throw new Error(`job_failures insert failed: ${insertError.message}`);
+  }
   await deleteMessage(queue, msg.msgId);
 }
 
 export async function closeQueuePool(): Promise<void> {
-  await pool?.end();
-  pool = undefined;
+  // Queues now go through the Supabase client; nothing to close.
 }

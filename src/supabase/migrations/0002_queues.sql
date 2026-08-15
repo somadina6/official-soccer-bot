@@ -11,6 +11,5 @@ select pgmq.create('x-publishing');
 select pgmq.create('post-corrections');
 select pgmq.create('dead-letter');
 
--- Queues stay private to Postgres: we deliberately do NOT expose pgmq_public
--- through the Data API. The worker consumes them over a direct server-side
--- Postgres connection with the service role.
+-- The worker uses pgmq_public RPCs (send/read/archive/delete) with the
+-- secret key. Do not grant pgmq_public to anon or authenticated.

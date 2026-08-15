@@ -16,11 +16,27 @@ async function sportsGet<T>(path: string): Promise<T> {
 export type SearchResponse = {
   data: {
     results: Array<{
-      type: 'team' | 'player' | 'tournament';
-      entity: { id: number; name: string; country?: { name?: string } };
+      type: string;
+      entity: {
+        id: number;
+        name: string;
+        slug?: string;
+        gender?: string;
+        country?: { name?: string };
+        category?: { name?: string; country?: { name?: string } };
+      };
     }>;
   };
 };
+
+function tournamentCountry(entity: SearchResponse['data']['results'][number]['entity']): string {
+  return (
+    entity.category?.country?.name ??
+    entity.category?.name ??
+    entity.country?.name ??
+    ''
+  ).toLowerCase();
+}
 
 /**
  * Discovers the English Premier League tournament ID via search. Entity IDs
@@ -35,12 +51,14 @@ export async function discoverPremierLeagueId(): Promise<{
   const result = await sportsGet<SearchResponse>(
     '/search?q=' + encodeURIComponent('premier league'),
   );
-  const candidates = result.data.results.filter(
-    ({ type, entity }) =>
-      type === 'tournament' &&
+  const candidates = result.data.results.filter(({ type, entity }) => {
+    const isTournament = type === 'uniqueTournament' || type === 'tournament';
+    return (
+      isTournament &&
       entity.name.toLowerCase() === 'premier league' &&
-      entity.country?.name?.toLowerCase() === 'england',
-  );
+      tournamentCountry(entity) === 'england'
+    );
+  });
 
   if (candidates.length !== 1) {
     throw new Error(
