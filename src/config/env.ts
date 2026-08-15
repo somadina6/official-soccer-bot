@@ -1,31 +1,41 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 const boolFromString = z
   .string()
-  .transform(v => v === 'true' || v === '1')
+  .transform((v) => v === "true" || v === "1")
   .pipe(z.boolean());
 
 const EnvSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
-  LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+  LOG_LEVEL: z
+    .enum(["trace", "debug", "info", "warn", "error", "fatal"])
+    .default("info"),
 
-  PUBLISHING_ENABLED: boolFromString.default('false'),
-  DRY_RUN: boolFromString.default('true'),
-  BANTER_TONE: z.enum(['neutral', 'playful', 'spicy']).default('playful'),
+  PUBLISHING_ENABLED: boolFromString.default("false"),
+  DRY_RUN: boolFromString.default("true"),
+  BANTER_TONE: z.enum(["neutral", "playful", "spicy"]).default("playful"),
 
   SPORTSAPI_KEY: z.string().min(1),
-  SPORTSAPI_BASE_URL: z.string().url().default('https://api.sportsapipro.com/v2/football'),
-  SPORTSAPI_WS_URL: z.string().url().default('wss://api.sportsapipro.com/v2/football/ws'),
+  SPORTSAPI_BASE_URL: z
+    .string()
+    .url()
+    .default("https://api.sportsapipro.com/v2/football"),
+  SPORTSAPI_WS_URL: z
+    .string()
+    .url()
+    .default("wss://api.sportsapipro.com/v2/football/ws"),
 
   SUPABASE_URL: z.string().url(),
   SUPABASE_SECRET_KEY: z.string().min(1),
   SUPABASE_DB_URL: z.string().min(1),
-  SUPABASE_STORAGE_BUCKET: z.string().default(''),
+  SUPABASE_STORAGE_BUCKET: z.string().default(""),
 
   OPENAI_API_KEY: z.string().min(1),
-  OPENAI_TEXT_MODEL: z.string().default('gpt-5.6-luna'),
-  OPENAI_IMAGE_MODEL: z.string().default('gpt-image-2'),
+  OPENAI_TEXT_MODEL: z.string().default("gpt-5.6-luna"),
+  OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2"),
 
   TWITTER_CONSUMER_KEY: z.string().min(1),
   TWITTER_CONSUMER_SECRET: z.string().min(1),
@@ -35,7 +45,7 @@ const EnvSchema = z.object({
   MAX_POSTS_PER_15_MIN: z.coerce.number().int().positive().default(12),
   MAX_POSTS_PER_DAY: z.coerce.number().int().positive().default(100),
 
-  SENTRY_DSN: z.string().default(''),
+  SENTRY_DSN: z.string().default(""),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -51,19 +61,11 @@ export function loadEnv(): Env {
   if (cached) return cached;
   const parsed = EnvSchema.safeParse({
     ...process.env,
-    TWITTER_CONSUMER_KEY:
-      process.env.TWITTER_CONSUMER_KEY || process.env.X_API_KEY,
-    TWITTER_CONSUMER_SECRET:
-      process.env.TWITTER_CONSUMER_SECRET || process.env.X_API_SECRET,
-    TWITTER_ACCESS_TOKEN:
-      process.env.TWITTER_ACCESS_TOKEN || process.env.X_ACCESS_TOKEN,
-    TWITTER_ACCESS_SECRET:
-      process.env.TWITTER_ACCESS_SECRET || process.env.X_ACCESS_TOKEN_SECRET,
   });
   if (!parsed.success) {
     const problems = parsed.error.issues
-      .map(issue => `  - ${issue.path.join('.')}: ${issue.message}`)
-      .join('\n');
+      .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
+      .join("\n");
     throw new Error(`Invalid environment configuration:\n${problems}`);
   }
   cached = parsed.data;
