@@ -53,8 +53,8 @@ export async function generateBackground(prompt: string): Promise<Buffer> {
     model: env.OPENAI_IMAGE_MODEL,
     prompt,
     size: '1024x1024',
-    quality: 'medium',
-    output_format: 'webp',
+    quality: 'low',
+    output_format: 'webp'
   });
   const b64 = result.data?.[0]?.b64_json;
   if (!b64) throw new Error('Image generation returned no data');
