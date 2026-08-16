@@ -159,6 +159,31 @@ const IncidentSchema = z
 
 export type ProviderIncident = z.infer<typeof IncidentSchema>;
 
+/**
+ * Identity fields that decide whether two incident payloads are the same
+ * publishable event. Volatile extras (passing-network coordinates, market
+ * values, userCount) are excluded so live polls do not mint new revisions.
+ */
+export function canonicalIncidentFingerprint(raw: unknown): Record<string, unknown> {
+  const parsed = IncidentSchema.safeParse(raw);
+  if (!parsed.success) return { raw };
+  const incident = parsed.data;
+  const assist = incident.assist1 ?? incident.assist;
+  return {
+    id: incident.id ?? null,
+    incidentType: incident.incidentType ?? incident.type ?? null,
+    incidentClass: incident.incidentClass ?? null,
+    minute: incident.minute ?? incident.time ?? null,
+    isHome: incident.isHome ?? null,
+    rescinded: incident.rescinded === true,
+    isCancelled: incident.isCancelled === true,
+    playerId: incident.player?.id ?? null,
+    assistId: assist?.id ?? null,
+    homeScore: incident.homeScore ?? null,
+    awayScore: incident.awayScore ?? null,
+  };
+}
+
 function compactKey(value: string): string {
   return value.toLowerCase().replace(/[_\-\s]/g, '');
 }
@@ -242,7 +267,7 @@ export function normalizeIncident(raw: unknown, context: MatchContext): MatchEve
     occurredAt: new Date().toISOString(),
     home,
     away,
-    rawPayloadHash: hashPayload(raw),
+    rawPayloadHash: hashPayload(canonicalIncidentFingerprint(raw)),
   };
 
   if (incident.id !== undefined) event.incidentId = String(incident.id);

@@ -82,13 +82,46 @@ function naturalKey(event: MatchEvent): string {
   ].join(':');
 }
 
+const IN_FLIGHT_STATES = new Set([
+  'RECEIVED',
+  'PENDING_CONFIRMATION',
+  'CONFIRMED',
+  'GENERATING',
+  'VALIDATED',
+  'PUBLISHING',
+  'PUBLISHED',
+]);
+
+export type ExistingIngestRow = {
+  revision: number;
+  raw_payload_hash: string;
+  state: string;
+};
+
+/**
+ * Skip a new revision when this incident was already seen, or is already
+ * progressing toward a post. Overturns always create a revision so corrections
+ * can run.
+ */
+export function shouldSkipDuplicateIngest(
+  existing: ExistingIngestRow[],
+  incomingHash: string,
+  incomingStatus: MatchEvent['status'],
+): boolean {
+  if (existing.some(row => row.raw_payload_hash === incomingHash)) return true;
+  const latest = existing[0];
+  if (!latest) return false;
+  if (incomingStatus === 'OVERTURNED') return false;
+  return IN_FLIGHT_STATES.has(latest.state);
+}
+
 /**
  * Ingests one normalized event idempotently.
  *
- * - Same natural key + same payload hash → duplicate, ignored. Replaying the
- *   same feed any number of times creates zero additional rows (Phase 2 exit).
- * - Same natural key + new hash → a new revision row is inserted and a new
- *   confirmation job is queued (e.g. VAR status change).
+ * - Same natural key + same canonical hash → duplicate, ignored (including
+ *   an earlier revision whose hash later reappears).
+ * - Same incident already in flight / published → ignored unless overturned.
+ * - Overturned status → new revision routed to corrections.
  */
 async function ingestEvent(event: MatchEvent, fixture: FixtureRow, rawPayload: unknown): Promise<void> {
   const supabase = getSupabase();
@@ -98,13 +131,16 @@ async function ingestEvent(event: MatchEvent, fixture: FixtureRow, rawPayload: u
     .from('match_events')
     .select('id, revision, raw_payload_hash, state')
     .like('idempotency_key', `${key}:%`)
-    .order('revision', { ascending: false })
-    .limit(1);
+    .order('revision', { ascending: false });
   if (lookupError) throw new Error(`event lookup failed: ${lookupError.message}`);
 
-  const latest = existing?.[0];
-  if (latest && latest.raw_payload_hash === event.rawPayloadHash) return; // exact duplicate
+  const rows = (existing ?? []) as ExistingIngestRow[];
+  if (shouldSkipDuplicateIngest(rows, event.rawPayloadHash, event.status)) {
+    logger.debug({ key, status: event.status }, 'duplicate incident ignored');
+    return;
+  }
 
+  const latest = rows[0];
   const revision = latest ? latest.revision + 1 : 0;
   const idempotencyKey = `${key}:${revision}`;
 

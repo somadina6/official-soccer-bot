@@ -105,6 +105,32 @@ describe('normalizeIncident', () => {
     const b = normalizeIncident({ ...payload }, context);
     expect(a!.rawPayloadHash).toBe(b!.rawPayloadHash);
   });
+
+  it('ignores volatile passing-network fields in the hash', () => {
+    const base = {
+      id: 357951136,
+      incidentType: 'goal',
+      incidentClass: 'regular',
+      time: 48,
+      isHome: true,
+      player: { id: 547410, name: 'Martin Ødegaard' },
+      assist1: { id: 1031259, name: 'Christos Tzolis' },
+      homeScore: 3,
+      awayScore: 0,
+    };
+    const a = normalizeIncident(
+      { ...base, footballPassingNetworkAction: [{ eventType: 'pass', playerCoordinates: { x: 1, y: 2 } }] },
+      context,
+    );
+    const b = normalizeIncident(
+      { ...base, footballPassingNetworkAction: [{ eventType: 'pass', playerCoordinates: { x: 9, y: 8 } }], userCount: 99 },
+      context,
+    );
+    expect(a!.rawPayloadHash).toBe(b!.rawPayloadHash);
+
+    const overturned = normalizeIncident({ ...base, rescinded: true }, context);
+    expect(overturned!.rawPayloadHash).not.toBe(a!.rawPayloadHash);
+  });
 });
 
 describe('buildIdempotencyKey', () => {
