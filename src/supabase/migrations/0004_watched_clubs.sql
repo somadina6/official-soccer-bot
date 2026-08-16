@@ -16,9 +16,11 @@ alter table watched_clubs enable row level security;
 
 -- Example (uncomment and run once, then restart the worker with SportsAPI on):
 insert into watched_clubs (slug, provider, expected_name, expected_country)
-values ('arsenal', 'sportsapi-pro', 'Arsenal', 'England'),
-('man-city', 'sportsapi-pro', 'Manchester City', 'England');
-('liverpool', 'sportsapi-pro', 'Liverpool', 'England'),
-('chelsea', 'sportsapi-pro', 'Chelsea', 'England'),
-('tottenham', 'sportsapi-pro', 'Tottenham Hotspur', 'England'),
-('manchester-united', 'sportsapi-pro', 'Manchester United', 'England');
+values
+  ('arsenal', 'sportsapi-pro', 'Arsenal', 'England'),
+  ('man-city', 'sportsapi-pro', 'Manchester City', 'England'),
+  ('liverpool', 'sportsapi-pro', 'Liverpool', 'England'),
+  ('chelsea', 'sportsapi-pro', 'Chelsea', 'England'),
+  ('tottenham', 'sportsapi-pro', 'Tottenham Hotspur', 'England'),
+  ('manchester-united', 'sportsapi-pro', 'Manchester United', 'England')
+on conflict (slug) do nothing;
