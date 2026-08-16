@@ -55,10 +55,10 @@ describe('fallbackTemplate', () => {
     artworkOk(fallbackTemplate(match), match);
   });
 
-  it('passes validation for a red card without naming the player', () => {
+  it('passes validation for a red card that names the player', () => {
     const match = event({ type: 'RED_CARD', minute: 61, player: { id: '1', name: 'Rice' } });
     const content = fallbackTemplate(match);
-    expect(content.postText.toLowerCase()).not.toContain('rice');
+    expect(content.postText.toLowerCase()).toContain('rice');
     artworkOk(content, match);
   });
 
