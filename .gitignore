@@ -4,5 +4,6 @@ tmp/
 logs/
 .env
 .env.local
+.env.prod
 *.log
 .DS_Store

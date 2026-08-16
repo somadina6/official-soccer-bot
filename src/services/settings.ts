@@ -27,8 +27,8 @@ export async function loadRuntimeSettings(): Promise<RuntimeSettings> {
   const map = new Map<string, unknown>((data ?? []).map(row => [row.key, row.value]));
 
   return {
-    publishingEnabled: env.PUBLISHING_ENABLED && map.get('publishing_enabled') === true,
-    dryRun: env.DRY_RUN || map.get('dry_run') === true,
+    publishingEnabled: env.PUBLISHING_ENABLED,
+    dryRun: env.DRY_RUN,
     manualApproval: map.get('manual_approval') === true,
     banterTone: (map.get('banter_tone') as BanterTone) ?? env.BANTER_TONE,
     enabledEventTypes: new Set(

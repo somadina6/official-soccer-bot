@@ -14,7 +14,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed:test-goal": "tsx --env-file=.env.local src/scripts/seed-test-goal.ts"
+    "seed:test-goal": "tsx --env-file=.env.local src/scripts/seed-test-goal.ts",
+    "heroku:config": "bash scripts/heroku-set-config.sh"
   },
   "dependencies": {
     "@sentry/node": "^8.0.0",
