@@ -23,9 +23,9 @@ export const CommentaryCandidateSchema = z.object({
 });
 export type CommentaryCandidate = z.infer<typeof CommentaryCandidateSchema>;
 
-/** Structured output from the text model: three copy candidates plus alt text. */
+/** Structured output from the text model: two copy candidates plus alt text. */
 export const CommentaryModelOutputSchema = z.object({
-  candidates: z.array(CommentaryCandidateSchema).length(3),
+  candidates: z.array(CommentaryCandidateSchema).length(2),
   altText: z.string(),
   referencedFacts: z.array(z.string()),
   risk: z.enum(['low', 'review', 'reject']),

@@ -75,17 +75,16 @@ function commentaryPolicy(
     "- For goals and decisive moments, react first and explain second.",
     "",
     "STRUCTURE:",
-    "- Produce exactly three distinct candidates.",
+    "- Produce exactly two distinct candidates.",
     "- Every candidate must contain exactly three compact lines:",
     "  hook — an immediate emotional reaction, normally 2–8 words.",
     "  factLine — the confirmed player/team, minute and score, written in active language.",
     "  punchline — one sharp, incident-specific observation, reaction or piece of banter.",
     "- The published post is those three lines joined with newline characters.",
-    "- Target 100–220 characters per candidate. Absolute maximum: 240.",
+    "- Target 150–220 characters per candidate. Absolute maximum: 240.",
     "- Candidate one should feel explosive and immediate.",
     "- Candidate two should emphasize quick football wit.",
-    "- Candidate three should feel polished and commentator-like while retaining energy.",
-    "- All three must follow the assigned style, but approach the event from different angles.",
+    "- Both must follow the assigned style, but approach the event from different angles.",
     "",
     "HOOKS:",
     "- The hook must sound natural when shouted or spoken aloud during a match.",
@@ -96,7 +95,7 @@ function commentaryPolicy(
     "- Never reuse a recent opening supplied by the user.",
     "",
     `Tone target: ${tone}. ${TONE_GUIDANCE[tone]}`,
-    `Assigned style for all three candidates: ${style}. ${STYLE_GUIDANCE[style]}`,
+    `Assigned style for both candidates: ${style}. ${STYLE_GUIDANCE[style]}`,
     `Confirmed situation: ${situation}. ${SITUATION_GUIDANCE[situation]}`,
     "",
     "VOICE:",
@@ -157,7 +156,7 @@ export type CommentaryInput = {
 };
 
 /**
- * Generates three schema-constrained commentary candidates.
+ * Generates two schema-constrained commentary candidates.
  *
  * Structured Outputs guarantees the response shape.
  * Factual correctness is enforced separately by the deterministic validator.

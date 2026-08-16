@@ -60,11 +60,11 @@ async function main(): Promise<void> {
     competitionId: String(competition.id),
     type: "GOAL",
     status: "CONFIRMED",
-    minute: 67,
+    minute: 69,
     occurredAt: new Date().toISOString(),
-    home: { id: "1", name: "ManCity", score: 2, colours: homeTeam.colours },
-    away: { id: "2", name: "Arsenal", score: 1, colours: awayTeam.colours },
-    player: { id: "10", name: "Foden" },
+    home: { id: "1", name: "ManCity", score: 6, colours: homeTeam.colours },
+    away: { id: "2", name: "Arsenal", score: 0, colours: awayTeam.colours },
+    player: { id: "10", name: "Jeremy Doku" },
     rawPayloadHash: createHash("sha256").update(incidentId).digest("hex"),
   };
   const idempotencyKey = `sportsapi-pro:${TEST_PROVIDER_MATCH_ID}:${incidentId}:0`;
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`
-Seeded a test GOAL (Foden, 67', ManCity 2–1 Arsenal).
+Seeded a test GOAL (Jeremy Doku, 67', ManCity 5–0 Arsenal).
 
   fixture_id:      ${fixture.id}
   match_event_id:  ${inserted.id}

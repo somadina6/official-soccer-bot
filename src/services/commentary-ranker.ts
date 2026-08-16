@@ -79,7 +79,7 @@ function safetyScore(
 }
 
 /**
- * Ranks three copy candidates. Invalid candidates score 0. The winner is the
+ * Ranks two copy candidates. Invalid candidates score 0. The winner is the
  * highest-scoring valid candidate, or undefined if none survive validation.
  */
 export function rankCandidates(

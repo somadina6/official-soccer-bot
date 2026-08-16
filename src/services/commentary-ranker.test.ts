@@ -35,11 +35,6 @@ describe('rankCandidates', () => {
           punchline: 'Get in.',
         },
         {
-          hook: 'WHAT A MOMENT',
-          factLine: "Saka, 67'. Arsenal 2–1 Chelsea.",
-          punchline: 'What a moment! Clinical finish!',
-        },
-        {
           hook: 'NO BACKLIFT. NO WARNING.',
           factLine: "Saka, 67'. Arsenal 2–1 Chelsea.",
           punchline: 'Left foot, low left, and the net found out last.',
@@ -57,11 +52,10 @@ describe('rankCandidates', () => {
     );
 
     expect(ranked[0]?.valid).toBe(false);
-    expect(ranked[1]?.valid).toBe(false);
-    expect(ranked[2]?.valid).toBe(true);
+    expect(ranked[1]?.valid).toBe(true);
     expect(winner?.postText).toContain('NO BACKLIFT');
     expect(winner?.postText).toContain('Left foot');
-    expect(winner?.candidates).toHaveLength(3);
+    expect(winner?.candidates).toHaveLength(2);
   });
 
   it('returns no winner when every candidate fails validation', () => {
@@ -70,7 +64,6 @@ describe('rankCandidates', () => {
       candidates: [
         { hook: 'GOAL', factLine: 'Wrong score.', punchline: 'Nope.' },
         { hook: 'GOAL', factLine: 'Still wrong.', punchline: 'Nope.' },
-        { hook: 'GOAL', factLine: 'Also wrong.', punchline: 'Nope.' },
       ],
     };
     const { winner, ranked } = rankCandidates(output, goalEvent, [], [], 'punchy', 'goal');

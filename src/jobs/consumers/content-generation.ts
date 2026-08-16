@@ -65,7 +65,7 @@ async function recordAttempt(
 
 /**
  * Consumes `content-generation`: classifies the situation, samples a style,
- * generates three candidates, ranks them, and falls back to the safe template
+ * generates two candidates, ranks them, and falls back to the safe template
  * after two failed attempts so the event is never missed.
  */
 export function startContentGenerationConsumer(): () => void {
