@@ -3,6 +3,7 @@ import { QUEUES } from '../supabase-queues.js';
 import { maybeEnqueueXPublishing } from './publish-join.js';
 import { startConsumer } from './runner.js';
 import { loadEvent } from './shared.js';
+import { logger } from '../../observability/logger.js';
 
 /**
  * Consumes `image-generation`: builds the per-event JPEG (GPT + overlay +
@@ -13,6 +14,7 @@ export function startImageGenerationConsumer(): () => void {
   return startConsumer(
     QUEUES.imageGeneration,
     async msg => {
+      logger.debug({ msg }, 'image generation: starting');
       const { matchEventId, idempotencyKey } = msg.message;
       if (!Number.isFinite(matchEventId) || matchEventId <= 0) {
         throw new Error('image job missing matchEventId');
