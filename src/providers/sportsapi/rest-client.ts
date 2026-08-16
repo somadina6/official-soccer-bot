@@ -1,4 +1,6 @@
 import { loadEnv } from '../../config/env.js';
+import { logger } from '../../observability/logger.js';
+
 
 /**
  * SportsAPI Pro Football V2 REST client. Paths and `x-api-key` authentication
@@ -83,11 +85,13 @@ export async function discoverPremierLeagueId(): Promise<{
  * unique `team` result so youth/women's sides are not chosen silently.
  */
 export async function discoverTeamId(expectedName: string, expectedCountry: string): Promise<number> {
+  logger.debug({ expectedName, expectedCountry }, 'discovering team id');
   const result = await sportsGet<SearchResponse>(
     '/search?q=' + encodeURIComponent(expectedName),
   );
   const name = expectedName.toLowerCase();
   const country = expectedCountry.toLowerCase();
+  // logger.debug({result}, 'result');
   const candidates = result.data.results.filter(({ type, entity }) => {
     const isTeam = type === 'team';
     const genderOk = !entity.gender || entity.gender === 'M';

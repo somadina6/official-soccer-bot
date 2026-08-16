@@ -1,5 +1,8 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import sharp from 'sharp';
 import type { MatchEvent } from '../domain/match-event.js';
+import { logger } from '../observability/logger.js';
 
 const SIZE = 1024;
 
@@ -57,11 +60,25 @@ function overlaySvg(event: MatchEvent): string {
 
 /** Composes the final 1024×1024 WebP post image from a prepared background. */
 export async function composeEventImage(background: Buffer, event: MatchEvent): Promise<Buffer> {
-  return sharp(background)
+  const image = await sharp(background)
     .resize(SIZE, SIZE, { fit: 'cover' })
     .composite([{ input: Buffer.from(overlaySvg(event)), top: 0, left: 0 }])
     .webp({ quality: 88 })
     .toBuffer();
+  await maybeWriteLocalPreview(image, event);
+  return image;
+}
+
+/** Writes the composed image to tmp/composed so you can open it locally. */
+async function maybeWriteLocalPreview(image: Buffer, event: MatchEvent): Promise<void> {
+  if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'production') return;
+  const dir = join(process.cwd(), 'tmp', 'composed');
+  await mkdir(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const name = `${stamp}-${event.matchId}-${event.type}-${event.minute}.webp`;
+  const path = join(dir, name);
+  await writeFile(path, image);
+  logger.info({ path }, 'wrote composed image preview');
 }
 
 /** Neutral fallback background when no prepared artwork exists for a fixture. */
