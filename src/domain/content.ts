@@ -47,7 +47,7 @@ export type GeneratedContent = z.infer<typeof GeneratedContentSchema> & {
 export type BanterTone = 'neutral' | 'playful' | 'spicy';
 
 export function composePostText(candidate: CommentaryCandidate): string {
-  return `${candidate.hook}\n${candidate.factLine}\n${candidate.punchline}`;
+  return `${candidate.hook}\n\n${candidate.factLine}\n\n${candidate.punchline}`;
 }
 
 export function extractHook(postText: string): string {
