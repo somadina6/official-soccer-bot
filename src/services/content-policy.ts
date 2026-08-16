@@ -1,5 +1,11 @@
-import type { GeneratedContent } from '../domain/content.js';
+import type {
+  CommentarySituation,
+  CommentaryStyle,
+  GeneratedContent,
+} from '../domain/content.js';
+import { extractHook } from '../domain/content.js';
 import type { MatchEvent } from '../domain/match-event.js';
+import { classifySituation, requiresPlayerName } from './commentary-situation.js';
 
 /**
  * Deterministic post-generation validator (section 7). Structured Outputs
@@ -7,9 +13,12 @@ import type { MatchEvent } from '../domain/match-event.js';
  * before publishing. Returns the full list of violations for audit.
  */
 
-const MAX_LENGTH = 240;
+export const MAX_POST_LENGTH = 240;
 
 const URL_PATTERN = /https?:\/\/|www\./i;
+const HASHTAG_PATTERN = /#[A-Za-z0-9_]/;
+const MENTION_PATTERN = /(^|[^A-Za-z0-9_])@[A-Za-z0-9_]+/;
+const GENERIC_GOAL_HOOK = /^\s*go+a+l!*\s*$/i;
 
 const BANNED_SUPERLATIVES = [
   'first ever',
@@ -28,6 +37,23 @@ const BANNED_PHRASES = [
   'bet ', 'betting', 'odds', 'parlay', 'stake',
   'ugly', 'fat', 'idiot', 'stupid', 'disgrace of a human',
 ];
+
+const BANNED_CLICHES = [
+  'what a moment',
+  'the beautiful game',
+  'football, bloody hell',
+  'football bloody hell',
+  'the stadium erupts',
+  'against all odds',
+  'a night to remember',
+  'clinical finish',
+  'game on',
+  'footballing gods',
+  'eternal symphony',
+  'symphony of destiny',
+];
+
+const BANNED_CLICHE_WORDS = ['scenes'];
 
 function normalize(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -49,7 +75,30 @@ export function similarity(a: string, b: string): number {
   return shared / (gramsA.size + gramsB.size - shared);
 }
 
+export function maxSimilarity(text: string, recentPosts: string[]): number {
+  let best = 0;
+  for (const previous of recentPosts) {
+    const score = similarity(text, previous);
+    if (score > best) best = score;
+  }
+  return best;
+}
+
 const SIMILARITY_THRESHOLD = 0.6;
+
+export function countEmojis(text: string): number {
+  return text.match(/\p{Extended_Pictographic}/gu)?.length ?? 0;
+}
+
+function isAllCapsLine(line: string): boolean {
+  const letters = line.replace(/[^A-Za-z]/g, '');
+  return letters.length >= 3 && letters === letters.toUpperCase();
+}
+
+export type ContentValidationOptions = {
+  style?: CommentaryStyle;
+  situation?: CommentarySituation;
+};
 
 export type ValidationResult = { valid: true } | { valid: false; errors: string[] };
 
@@ -58,17 +107,39 @@ export function validateContent(
   event: MatchEvent,
   recentPosts: string[],
   approvedContext: string[] = [],
+  options: ContentValidationOptions = {},
 ): ValidationResult {
   const errors: string[] = [];
   const text = content.postText;
   const lower = text.toLowerCase();
+  const situation = options.situation ?? classifySituation(event, approvedContext);
+  const style = options.style;
 
   if (content.risk === 'reject') errors.push('model self-flagged the content as reject');
   if (text.length === 0) errors.push('empty post text');
-  if (text.length > MAX_LENGTH) errors.push(`post text exceeds ${MAX_LENGTH} characters (${text.length})`);
+  if (text.length > MAX_POST_LENGTH) errors.push(`post text exceeds ${MAX_POST_LENGTH} characters (${text.length})`);
   if (URL_PATTERN.test(text)) errors.push('post text contains a URL, which is disabled');
+  if (HASHTAG_PATTERN.test(text)) errors.push('post text contains a hashtag, which is disabled');
+  if (MENTION_PATTERN.test(text)) errors.push('post text contains an @mention, which is disabled');
   if (!content.altText.toLowerCase().includes('ai-generated')) {
     errors.push('alt text must disclose the artwork is AI-generated');
+  }
+
+  const emojiCount = countEmojis(text);
+  const maxEmoji = style === 'dramatic' ? 2 : 1;
+  if (emojiCount > 2) errors.push(`post uses ${emojiCount} emojis; maximum is 2`);
+  else if (emojiCount > maxEmoji) {
+    errors.push(`post uses ${emojiCount} emojis; maximum is ${maxEmoji} unless style is dramatic`);
+  }
+
+  const capsLines = text.split('\n').filter(isAllCapsLine);
+  if (capsLines.length > 1) errors.push('post has more than one capitalized hook');
+
+  const hook = extractHook(text);
+  if (GENERIC_GOAL_HOOK.test(hook)) errors.push('generic GOOOOAL hook is not allowed');
+
+  if (situation !== 'full_time' && text.includes('?')) {
+    errors.push('questions are reserved for full time');
   }
 
   for (const phrase of BANNED_SUPERLATIVES) {
@@ -77,9 +148,14 @@ export function validateContent(
   for (const phrase of BANNED_PHRASES) {
     if (lower.includes(phrase)) errors.push(`banned phrase: "${phrase.trim()}"`);
   }
+  for (const phrase of BANNED_CLICHES) {
+    if (lower.includes(phrase)) errors.push(`banned cliché: "${phrase}"`);
+  }
+  for (const word of BANNED_CLICHE_WORDS) {
+    if (new RegExp(`\\b${word}\\b`, 'i').test(text)) errors.push(`banned cliché: "${word}"`);
+  }
 
-  // Factual checks: player, minute and score must exactly match the event.
-  if (event.player && !lower.includes(event.player.name.toLowerCase())) {
+  if (event.player && requiresPlayerName(situation) && !lower.includes(event.player.name.toLowerCase())) {
     errors.push(`post must name the player "${event.player.name}"`);
   }
   if (event.type !== 'FULL_TIME' && !text.includes(String(event.minute))) {
@@ -89,7 +165,6 @@ export function validateContent(
   if (!scorePattern.test(text)) {
     errors.push(`post must contain the score ${event.home.score}-${event.away.score}`);
   }
-  // Guard against transposed or invented scoreline digits.
   const digits = text.match(/\d+/g) ?? [];
   const allowedNumbers = new Set(
     [event.minute, event.stoppageMinute, event.home.score, event.away.score]

@@ -345,6 +345,12 @@ export function extractApprovedIncidentFacts(raw: unknown): string[] {
     else if (incident.isHome === false) facts.push('scored by the away team');
   }
 
+  if (rawType === 'penaltysaved' || rawType === 'savedpenalty') {
+    facts.push('penalty saved');
+  } else if (rawType === 'penaltymissed' || rawType === 'missedpenalty') {
+    facts.push('penalty missed');
+  }
+
   const klass = compactKey(incident.incidentClass ?? '');
   if (klass === 'regular') facts.push('from open play');
   else if (klass === 'penalty') facts.push('from a penalty');

@@ -3,6 +3,9 @@ import type { GeneratedContent } from '../../domain/content.js';
 import { logger } from '../../observability/logger.js';
 import { fallbackTemplate, generateCommentary } from '../../providers/openai/commentary.js';
 import { extractApprovedIncidentFacts } from '../../providers/sportsapi/mapper.js';
+import { rankCandidates } from '../../services/commentary-ranker.js';
+import { classifySituation } from '../../services/commentary-situation.js';
+import { sampleCommentaryStyle } from '../../services/commentary-style.js';
 import { validateContent } from '../../services/content-policy.js';
 import { loadRuntimeSettings } from '../../services/settings.js';
 import { getSupabase } from '../../supabase/client.js';
@@ -22,7 +25,7 @@ const APPROVED_CONTEXT: string[] = [
   'Merseyside derbies are Liverpool against Everton.',
 ];
 
-async function recentPostTexts(limit = 10): Promise<string[]> {
+async function recentPostTexts(limit = 20): Promise<string[]> {
   const { data } = await getSupabase()
     .from('published_posts')
     .select('post_text')
@@ -52,6 +55,8 @@ async function recordAttempt(
       validation_passed: validationErrors.length === 0,
       validation_errors: validationErrors,
       used_fallback_template: usedFallback,
+      candidates: content.candidates ?? null,
+      rank_debug: content.rankDebug ?? null,
     })
     .select('id')
     .single();
@@ -60,9 +65,9 @@ async function recordAttempt(
 }
 
 /**
- * Consumes `content-generation`: generates commentary with structured output,
- * validates it deterministically, and falls back to the safe template after
- * two failed attempts so the event is never missed.
+ * Consumes `content-generation`: classifies the situation, samples a style,
+ * generates three candidates, ranks them, and falls back to the safe template
+ * after two failed attempts so the event is never missed.
  */
 export function startContentGenerationConsumer(): () => void {
   return startConsumer(
@@ -77,43 +82,68 @@ export function startContentGenerationConsumer(): () => void {
       await setEventState(matchEventId, 'GENERATING');
 
       const settings = await loadRuntimeSettings();
-      const recent = await recentPostTexts();
+      const recent = await recentPostTexts(20);
       const contextDictionary = [
         ...APPROVED_CONTEXT,
         ...extractApprovedIncidentFacts(row.rawPayload),
       ];
+      const situation = classifySituation(row.event, contextDictionary);
+      const style = sampleCommentaryStyle(situation, settings.banterTone);
 
       let approved: { content: GeneratedContent; generationId: number } | undefined;
 
       for (let attempt = 1; attempt <= 2 && !approved; attempt++) {
-        let content: GeneratedContent;
         try {
-          content = await generateCommentary({
+          const output = await generateCommentary({
             event: row.event,
             tone: settings.banterTone,
+            style,
+            situation,
             contextDictionary,
             recentOpenings: recent,
           });
+          const { winner, ranked } = rankCandidates(
+            output,
+            row.event,
+            recent,
+            contextDictionary,
+            style,
+            situation,
+          );
+          if (winner) {
+            const generationId = await recordAttempt(matchEventId, attempt, winner, [], false);
+            approved = { content: winner, generationId };
+          } else {
+            const failed: GeneratedContent = {
+              postText: ranked[0]?.postText ?? '',
+              imagePrompt: output.imagePrompt,
+              altText: output.altText,
+              referencedFacts: output.referencedFacts,
+              risk: output.risk,
+              candidates: output.candidates,
+              rankDebug: ranked.map(candidate => ({
+                hook: candidate.candidate.hook,
+                score: candidate.score,
+                valid: candidate.valid,
+                errors: candidate.errors,
+              })),
+            };
+            const errors = ranked.flatMap(entry => entry.errors);
+            await recordAttempt(matchEventId, attempt, failed, errors, false);
+            logger.warn({ matchEventId, attempt, errors }, 'generated content rejected');
+          }
         } catch (error) {
           logger.warn({ matchEventId, attempt, error }, 'commentary generation call failed');
-          continue;
         }
-        const result = validateContent(content, row.event, recent, contextDictionary);
-        const generationId = await recordAttempt(
-          matchEventId,
-          attempt,
-          content,
-          result.valid ? [] : result.errors,
-          false,
-        );
-        if (result.valid) approved = { content, generationId };
-        else logger.warn({ matchEventId, attempt, errors: result.errors }, 'generated content rejected');
       }
 
       if (!approved) {
         logger.warn({ matchEventId, attempt: 3 }, 'fallback template used');
-        const fallback = fallbackTemplate(row.event);
-        const result = validateContent(fallback, row.event, recent, contextDictionary);
+        const fallback = fallbackTemplate(row.event, contextDictionary);
+        const result = validateContent(fallback, row.event, recent, contextDictionary, {
+          situation,
+          style: 'punchy',
+        });
         const generationId = await recordAttempt(
           matchEventId,
           3,
@@ -122,8 +152,6 @@ export function startContentGenerationConsumer(): () => void {
           true,
         );
         if (!result.valid) {
-          // Even the deterministic template failed validation (should not
-          // happen); a human needs to look at this event.
           await setEventState(matchEventId, 'MANUAL_REVIEW');
           logger.error({ matchEventId, errors: result.errors }, 'fallback template rejected');
           return;

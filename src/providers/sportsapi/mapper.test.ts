@@ -289,6 +289,23 @@ describe('extractApprovedIncidentFacts', () => {
     expect(facts.join()).not.toContain('Tzolis');
   });
 
+  it('labels a saved penalty distinctly from a miss', () => {
+    expect(
+      extractApprovedIncidentFacts({
+        incidentType: 'penaltySaved',
+        time: 78,
+        player: { id: 1, name: 'Haaland' },
+      }),
+    ).toContain('penalty saved');
+    expect(
+      extractApprovedIncidentFacts({
+        incidentType: 'penaltyMissed',
+        time: 78,
+        player: { id: 1, name: 'Haaland' },
+      }),
+    ).toContain('penalty missed');
+  });
+
   it('includes a digit-free card reason and skips empty payloads', () => {
     expect(
       extractApprovedIncidentFacts({

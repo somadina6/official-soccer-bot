@@ -42,9 +42,12 @@ export function startPostCorrectionsConsumer(): () => void {
     }
 
     const event = row.event;
-    const correctionText =
-      `CORRECTION — the ${event.minute}' goal has been overturned by VAR. ` +
-      `Score stands at ${event.home.name} ${event.home.score}\u2013${event.away.score} ${event.away.name}.`;
+    const score = `${event.home.name} ${event.home.score}\u2013${event.away.score} ${event.away.name}`;
+    const correctionText = [
+      'NO GOAL. VAR HAS SPOKEN.',
+      `The ${event.minute}' goal is overturned. It stays ${score}.`,
+      'Celebrations returned with the receipt.',
+    ].join('\n');
     const altText =
       `AI-generated editorial football illustration. Overlay: VAR decision, ` +
       `${event.home.name} ${event.home.score}\u2013${event.away.score} ${event.away.name}.`;

@@ -121,6 +121,103 @@ describe('validateContent', () => {
     );
     expect(result.valid).toBe(false);
   });
+
+  it('rejects hashtags', () => {
+    const result = validateContent(
+      { ...validContent, postText: validContent.postText.replace('noise.', 'noise. #Arsenal') },
+      goalEvent,
+      [],
+    );
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.errors.join()).toMatch(/hashtag/i);
+  });
+
+  it('rejects @mentions', () => {
+    const result = validateContent(
+      { ...validContent, postText: validContent.postText.replace('Saka', '@Saka') },
+      goalEvent,
+      [],
+    );
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.errors.join()).toMatch(/mention/i);
+  });
+
+  it('rejects banned commentary clichés', () => {
+    const result = validateContent(
+      { ...validContent, postText: "What a moment! Saka, 67'. Arsenal 2–1 Chelsea." },
+      goalEvent,
+      [],
+    );
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.errors.join()).toMatch(/cliché|cliche/i);
+  });
+
+  it('rejects more than one ALL-CAPS line', () => {
+    const result = validateContent(
+      {
+        ...validContent,
+        postText: "NO BACKLIFT.\nSAKA FINISHES IT.\nSaka, 67'. Arsenal 2–1 Chelsea.",
+      },
+      goalEvent,
+      [],
+    );
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.errors.join()).toMatch(/capitalized hook/i);
+  });
+
+  it('rejects two emojis unless the style is dramatic', () => {
+    const postText = "NO BACKLIFT. ⚡🥶\nSaka, 67'. Arsenal 2–1 Chelsea.\nThe net found out last.";
+    const punchy = validateContent({ ...validContent, postText }, goalEvent, [], [], { style: 'punchy' });
+    expect(punchy.valid).toBe(false);
+    const dramatic = validateContent({ ...validContent, postText }, goalEvent, [], [], {
+      style: 'dramatic',
+    });
+    expect(dramatic).toEqual({ valid: true });
+  });
+
+  it('allows a red card post that names the team but not the player', () => {
+    const redEvent: MatchEvent = {
+      ...goalEvent,
+      type: 'RED_CARD',
+      minute: 61,
+      player: { id: '8', name: 'Rice' },
+      home: { id: '1', name: 'Arsenal', score: 1, colours: ['#EF0107'] },
+      away: { id: '2', name: 'Chelsea', score: 0, colours: ['#034694'] },
+    };
+    const result = validateContent(
+      {
+        ...validContent,
+        postText: "EARLY SHOWER.\nArsenal are down to ten after 61 minutes.\nArsenal 1–0 Chelsea.\nThe tactical plan has just been fed into the shredder.",
+      },
+      redEvent,
+      [],
+      [],
+      { situation: 'red_card' },
+    );
+    expect(result).toEqual({ valid: true });
+  });
+
+  it('allows a penalty save that names the keeper instead of the taker', () => {
+    const savedEvent: MatchEvent = {
+      ...goalEvent,
+      type: 'PENALTY_MISSED',
+      minute: 78,
+      player: { id: '9', name: 'Haaland' },
+      home: { id: '1', name: 'Everton', score: 1, colours: [] },
+      away: { id: '2', name: 'Arsenal', score: 0, colours: [] },
+    };
+    const result = validateContent(
+      {
+        ...validContent,
+        postText: "NOT TODAY.\nPickford saves the 78' penalty. Everton 1–0 Arsenal.\nRead it like tomorrow's newspaper.",
+      },
+      savedEvent,
+      [],
+      ['penalty saved', 'goalkeeper Pickford'],
+      { situation: 'penalty_saved' },
+    );
+    expect(result).toEqual({ valid: true });
+  });
 });
 
 describe('similarity', () => {
