@@ -1,6 +1,7 @@
 import { ApiResponseError, EUploadMimeType } from "twitter-api-v2";
 import { ImageFlowError } from "../../image-flow/errors.js";
 import { getXClient } from "./auth.js";
+import { logger } from "../../observability/logger.js";
 
 /** Unused X media typically expires after 24 hours; used as the default TTL. */
 export const X_MEDIA_DEFAULT_TTL_SECONDS = 24 * 60 * 60;
@@ -48,6 +49,7 @@ export async function uploadImage(image: Buffer): Promise<XMediaUploadResult> {
       expiresAt: new Date(Date.now() + X_MEDIA_DEFAULT_TTL_SECONDS * 1000),
     };
   } catch (error) {
+    logger.error({ error }, 'X media upload failed');
     wrapXError(error);
   }
 }
