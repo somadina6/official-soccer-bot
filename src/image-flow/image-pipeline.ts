@@ -24,7 +24,7 @@ export type PrepareEventImageInput = {
 /** Immutable, versioned object path (plan section 6). */
 export function buildImmutableStoragePath(input: PrepareEventImageInput): string {
   const season = new Date().getUTCFullYear().toString();
-  return `${season}/${input.event.matchId}/${input.matchEventId}/${IMAGE_PROMPT_VERSION}.jpg`;
+  return `${season}/${input.event.matchId}/${input.matchEventId}-${IMAGE_PROMPT_VERSION}.jpg`;
 }
 
 /**
