@@ -48,7 +48,6 @@ async function recordAttempt(
       attempt,
       model: usedFallback ? 'fallback-template' : loadEnv().OPENAI_TEXT_MODEL,
       post_text: content.postText,
-      image_prompt: content.imagePrompt,
       alt_text: content.altText,
       referenced_facts: content.referencedFacts,
       risk: content.risk,
@@ -116,7 +115,6 @@ export function startContentGenerationConsumer(): () => void {
           } else {
             const failed: GeneratedContent = {
               postText: ranked[0]?.postText ?? '',
-              imagePrompt: output.imagePrompt,
               altText: output.altText,
               referencedFacts: output.referencedFacts,
               risk: output.risk,
@@ -133,6 +131,7 @@ export function startContentGenerationConsumer(): () => void {
             logger.warn({ matchEventId, attempt, errors }, 'generated content rejected');
           }
         } catch (error) {
+          console.error(error);
           logger.warn({ matchEventId, attempt, error }, 'commentary generation call failed');
         }
       }

@@ -19,7 +19,6 @@ const goalEvent: MatchEvent = {
 };
 
 const artwork = {
-  imagePrompt: 'Abstract editorial football illustration in red and blue.',
   altText: 'AI-generated editorial football illustration. Overlay: Saka goal, 67th minute, Arsenal 2–1 Chelsea.',
   referencedFacts: ['Saka', "67'", 'Arsenal 2–1 Chelsea'],
   risk: 'low' as const,

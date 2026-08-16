@@ -94,7 +94,6 @@ export function rankCandidates(
     const postText = composePostText(candidate);
     const content: GeneratedContent = {
       postText,
-      imagePrompt: output.imagePrompt,
       altText: output.altText,
       referencedFacts: output.referencedFacts,
       risk: output.risk,
@@ -135,7 +134,6 @@ export function rankCandidates(
   const winner: GeneratedContent | undefined = winnerRow
     ? {
         postText: winnerRow.postText,
-        imagePrompt: output.imagePrompt,
         altText: output.altText,
         referencedFacts: output.referencedFacts,
         risk: output.risk,

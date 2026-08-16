@@ -20,7 +20,6 @@ const goalEvent: MatchEvent = {
 
 const validContent: GeneratedContent = {
   postText: "ARSENAL HAVE FOUND THE DOOR. Saka, 67'. Arsenal 2–1 Chelsea. North London is making noise.",
-  imagePrompt: 'Abstract editorial football illustration in red and blue.',
   altText: 'AI-generated editorial football illustration. Overlay: Saka goal, 67th minute, Arsenal 2–1 Chelsea.',
   referencedFacts: ['Saka', "67'", 'Arsenal 2–1 Chelsea'],
   risk: 'low',

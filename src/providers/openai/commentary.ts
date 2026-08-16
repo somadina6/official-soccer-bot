@@ -1,6 +1,6 @@
-import OpenAI from 'openai';
-import { zodResponseFormat } from 'openai/helpers/zod';
-import { loadEnv } from '../../config/env.js';
+import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { loadEnv } from "../../config/env.js";
 import {
   CommentaryModelOutputSchema,
   composePostText,
@@ -11,24 +11,36 @@ import {
   type CommentarySituation,
   type CommentaryStyle,
   type GeneratedContent,
-} from '../../domain/content.js';
-import type { MatchEvent } from '../../domain/match-event.js';
-import { logger } from '../../observability/logger.js';
-import { classifySituation, SITUATION_GUIDANCE } from '../../services/commentary-situation.js';
-import { STYLE_GUIDANCE } from '../../services/commentary-style.js';
+} from "../../domain/content.js";
+import type { MatchEvent } from "../../domain/match-event.js";
+import { logger } from "../../observability/logger.js";
+import {
+  classifySituation,
+  SITUATION_GUIDANCE,
+} from "../../services/commentary-situation.js";
+import { STYLE_GUIDANCE } from "../../services/commentary-style.js";
 
 let client: OpenAI | undefined;
 
 function getOpenAI(): OpenAI {
   if (client) return client;
-  client = new OpenAI({ apiKey: loadEnv().OPENAI_API_KEY });
+
+  client = new OpenAI({
+    apiKey: loadEnv().OPENAI_API_KEY,
+  });
+
   return client;
 }
 
 const TONE_GUIDANCE: Record<BanterTone, string> = {
-  neutral: 'Energetic commentary with almost no teasing. Sharpness ceiling: do not mock a team or player.',
-  playful: 'Light rivalry jokes about defending, finishing, tactics or the match situation.',
-  spicy: 'Sharper jokes, still strictly within the safety rules. Never identity, appearance, injury, tragedy or referee allegations.',
+  neutral:
+    "High-energy match reaction focused on the quality, pressure and drama of the moment. No teasing, but never dry or clinical.",
+
+  playful:
+    "Enthusiastic live reaction with light, unmistakably playful banter about defending, finishing, tactics or the match situation.",
+
+  spicy:
+    "Bold, high-energy reaction with a sharper football joke. Be cutting about the incident, never cruel about the person.",
 };
 
 const BANNED_CLICHE_PROMPT = [
@@ -41,8 +53,8 @@ const BANNED_CLICHE_PROMPT = [
   '"A night to remember!"',
   '"Clinical finish!"',
   '"Game on!"',
-  'footballing gods / eternal symphony / destiny-chapter metaphors',
-].join(', ');
+  "footballing gods / eternal symphony / destiny-chapter metaphors",
+].join(", ");
 
 function commentaryPolicy(
   tone: BanterTone,
@@ -50,36 +62,85 @@ function commentaryPolicy(
   situation: CommentarySituation,
 ): string {
   return [
-    'You write live Premier League posts for X as an informed football fan with quick wit — not a robotic scoreboard and not a rage-bait troll.',
-    'The account is club-neutral. Banter targets defending, finishing, tactics or the match situation — never identity, appearance, injury, tragedy or allegations about referees.',
-    '',
-    'STRUCTURE: produce exactly three distinct candidates. Each candidate has three compact parts:',
-    '  hook — one emotional first line. At most one capitalized hook; only this line may be ALL CAPS.',
-    '  factLine — the confirmed event fact (player/team, minute, score).',
-    '  punchline — one original observation. Humour must come from this incident, not a forced metaphor.',
-    'The published post is those three lines separated by newlines. Target 100–220 characters total. Absolute maximum 240.',
-    '',
-    `Tone ceiling: ${tone}. ${TONE_GUIDANCE[tone]}`,
-    `Assigned style (use this style for ALL three candidates): ${style}. ${STYLE_GUIDANCE[style]}`,
-    `Situation: ${situation}. ${SITUATION_GUIDANCE[situation]}`,
-    '',
-    'HARD RULES:',
-    '- You may ONLY use facts present in the event JSON or the provided context dictionary. Never invent facts, statistics, records or history.',
-    '- Context dictionary entries that describe how the incident happened (body part, placement, position, open play vs penalty, penalty saved/missed, goalkeeper name) are verified provider facts. Use them when they fit; do not require them.',
-    '- Zero or one emoji normally. Two emojis only if the assigned style is dramatic.',
-    '- No URLs. No hashtags. No unsolicited @mentions. Plain team and player names only.',
-    '- No questions unless the assigned style is question (full time).',
-    '- Do not lead goals with GOOOOAL, GOAL!, or stretched goal spellings. Vary the hook.',
-    '- Short sentences with natural rhythm. One event-specific metaphor or observation per candidate.',
+    "You write immediate Premier League reactions for X as a lively, informed and quick-witted football fan.",
+    "The account is club-neutral, but it is not emotionally neutral.",
+    "Make brilliant, shocking or decisive football feel brilliant, shocking or decisive.",
+    "",
+    "PRIMARY OBJECTIVE:",
+    "- Make every candidate feel alive, immediate and worth reading.",
+    "- Write as if the event happened seconds ago, not as if you are summarizing it afterward.",
+    "- Every candidate must express a clear emotion: excitement, disbelief, tension, admiration, shock or playful frustration.",
+    "- Use active verbs, confident phrasing, sentence fragments and controlled punctuation.",
+    "- Energy means urgency and personality, not invented importance or constant shouting.",
+    "- For goals and decisive moments, react first and explain second.",
+    "",
+    "STRUCTURE:",
+    "- Produce exactly three distinct candidates.",
+    "- Every candidate must contain exactly three compact lines:",
+    "  hook — an immediate emotional reaction, normally 2–8 words.",
+    "  factLine — the confirmed player/team, minute and score, written in active language.",
+    "  punchline — one sharp, incident-specific observation, reaction or piece of banter.",
+    "- The published post is those three lines joined with newline characters.",
+    "- Target 100–220 characters per candidate. Absolute maximum: 240.",
+    "- Candidate one should feel explosive and immediate.",
+    "- Candidate two should emphasize quick football wit.",
+    "- Candidate three should feel polished and commentator-like while retaining energy.",
+    "- All three must follow the assigned style, but approach the event from different angles.",
+    "",
+    "HOOKS:",
+    "- The hook must sound natural when shouted or spoken aloud during a match.",
+    "- One or two candidates may use a short ALL-CAPS hook. Never capitalize an entire post.",
+    "- Hooks must communicate a reaction, not merely label the event.",
+    "- Do not open goals with GOOOOAL, GOAL!, stretched goal spellings or a bare event label.",
+    "- Each candidate must have a genuinely different hook.",
+    "- Never reuse a recent opening supplied by the user.",
+    "",
+    `Tone target: ${tone}. ${TONE_GUIDANCE[tone]}`,
+    `Assigned style for all three candidates: ${style}. ${STYLE_GUIDANCE[style]}`,
+    `Confirmed situation: ${situation}. ${SITUATION_GUIDANCE[situation]}`,
+    "",
+    "VOICE:",
+    "- Sound like an intelligent football fan enjoying the chaos, not a notification service.",
+    "- The fact line may be factual without becoming robotic.",
+    '- Prefer active constructions such as "Haaland puts City ahead" over "The score is now 2–1".',
+    "- Banter may target defending, finishing, goalkeeping, tactics or the match situation.",
+    "- Celebrate excellent football regardless of which team produced it.",
+    "- Humour must come from the specific incident, not from a generic or forced joke.",
+    "- A vivid metaphor or comparison is optional. Never force one into every candidate.",
+    '- Avoid stiff wording such as "has registered a goal", "the player has scored", "the score is now" or "an important event occurred".',
+    "",
+    "FACTUAL RULES:",
+    "- Use only facts present in the event JSON or approved context dictionary.",
+    "- Never invent statistics, records, history, motives, quotations or match context.",
+    "- Context describing the body part, placement, pitch position, open play versus penalty, penalty outcome or goalkeeper name is verified provider data.",
+    "- Use verified context when it makes the post more vivid, but do not force every fact into the copy.",
+    "- Never describe an event as a winner, equalizer, comeback, upset or record unless the supplied data confirms it.",
+    '- Do not use unsupported superlatives such as "first ever", "greatest ever" or "record-breaking".',
+    "",
+    "FORMATTING:",
+    "- Use zero or one emoji normally.",
+    "- Two emojis are allowed only when the assigned style is dramatic.",
+    "- Normally use no more than two exclamation marks per candidate.",
+    "- No URLs, hashtags or unsolicited @mentions.",
+    "- Use plain player and team names.",
+    "- Do not ask questions unless the assigned style is question and the situation is full time.",
+    "- Use short sentences with natural rhythm.",
     `- Never use these clichés: ${BANNED_CLICHE_PROMPT}.`,
-    '- No slurs, protected-class references, abuse about appearance, mockery of injury or tragedy, sexual content, referee-corruption claims, or match-fixing allegations.',
-    '- No unsupported superlatives such as "first ever" or "record-breaking".',
-    '- Do not reuse any recent post openings you are shown. Each of the three candidates must have a different hook.',
-    '- Candidates must differ from each other in hook and punchline — not three paraphrases of the same joke.',
-    '',
-    'Also produce: an image prompt for an abstract editorial illustration in the two teams\' colour palettes (no logos, league marks, sponsor marks or recognizable player likenesses), and descriptive alt text that states the artwork is AI-generated and describes the overlay facts.',
-    'Set risk to "review" if anything might be borderline, "reject" if you cannot produce a safe post.',
-  ].join('\n');
+    "- Candidates must differ in both hook and punchline, not merely substitute synonyms.",
+    "",
+    "SAFETY:",
+    "- Never target identity, protected characteristics, appearance, injury, disability, tragedy or personal circumstances.",
+    "- No slurs, threats, sexual content or dehumanizing abuse.",
+    "- No referee-corruption, match-fixing or intentional-injury allegations.",
+    "- Spicy means sharper football banter, not personal hostility.",
+    '- Set risk to "review" if wording could reasonably be considered borderline.',
+    '- Set risk to "reject" only if you cannot produce a safe, energetic alternative.',
+    "",
+    "ALT TEXT:",
+    "- Produce descriptive alt text separately.",
+    "- Explicitly state that the artwork is AI-generated.",
+    "- Describe the visible scene and confirmed overlay facts without adding unverified match details.",
+  ].join("\n");
 }
 
 export type CommentaryInput = {
@@ -87,49 +148,85 @@ export type CommentaryInput = {
   tone: BanterTone;
   style: CommentaryStyle;
   situation: CommentarySituation;
+
   /** Short, operator-approved rivalry/context dictionary. */
   contextDictionary: string[];
-  /** Last 20 posts, to avoid repetition. */
+
+  /** Last 20 posts, used to avoid repetitive openings. */
   recentOpenings: string[];
 };
 
-/** Generates three schema-constrained copy candidates. Shape is guaranteed by
- * Structured Outputs; truth is enforced separately by the deterministic validator. */
-export async function generateCommentary(input: CommentaryInput): Promise<CommentaryModelOutput> {
+/**
+ * Generates three schema-constrained commentary candidates.
+ *
+ * Structured Outputs guarantees the response shape.
+ * Factual correctness is enforced separately by the deterministic validator.
+ */
+export async function generateCommentary(
+  input: CommentaryInput,
+): Promise<CommentaryModelOutput> {
   const env = loadEnv();
-  logger.debug({ input }, 'generating commentary');
+
+  logger.debug(
+    {
+      eventId: input.event.matchId,
+      situation: input.situation,
+      style: input.style,
+      tone: input.tone,
+    },
+    "generating commentary",
+  );
+
   const completion = await getOpenAI().beta.chat.completions.parse({
     model: env.OPENAI_TEXT_MODEL,
     messages: [
-      { role: 'system', content: commentaryPolicy(input.tone, input.style, input.situation) },
       {
-        role: 'user',
+        role: "system",
+        content: commentaryPolicy(input.tone, input.style, input.situation),
+      },
+      {
+        role: "user",
         content: JSON.stringify({
           event: input.event,
           situation: input.situation,
           style: input.style,
+          tone: input.tone,
           approvedContext: input.contextDictionary,
           recentOpenings: input.recentOpenings.map(extractHook),
         }),
       },
     ],
-    response_format: zodResponseFormat(CommentaryModelOutputSchema, 'generated_content'),
+    response_format: zodResponseFormat(
+      CommentaryModelOutputSchema,
+      "generated_content",
+    ),
   });
 
   const parsed = completion.choices[0]?.message.parsed;
-  if (!parsed) throw new Error('OpenAI returned no parsed structured output');
+
+  if (!parsed) {
+    throw new Error("OpenAI returned no parsed structured output");
+  }
+
   return parsed;
 }
 
 function scoreline(event: MatchEvent): string {
-  return `${event.home.name} ${event.home.score}\u2013${event.away.score} ${event.away.name}`;
+  return (
+    `${event.home.name} ${event.home.score}` +
+    `\u2013${event.away.score} ${event.away.name}`
+  );
 }
 
 function keeperName(approvedContext: string[]): string | undefined {
   for (const fact of approvedContext) {
     const match = fact.match(/^goalkeeper\s+(.+)$/i);
-    if (match?.[1]) return match[1];
+
+    if (match?.[1]) {
+      return match[1];
+    }
   }
+
   return undefined;
 }
 
@@ -137,100 +234,132 @@ function minuteLabel(event: MatchEvent): string {
   if (event.stoppageMinute !== undefined && event.stoppageMinute > 0) {
     return `${event.minute}+${event.stoppageMinute}'`;
   }
+
   return `${event.minute}'`;
 }
 
-function fallbackCandidate(event: MatchEvent, situation: CommentarySituation, approvedContext: string[]): CommentaryCandidate {
+function fallbackCandidate(
+  event: MatchEvent,
+  situation: CommentarySituation,
+  approvedContext: string[],
+): CommentaryCandidate {
   const score = scoreline(event);
   const player = event.player?.name;
   const minute = minuteLabel(event);
 
   switch (situation) {
-    case 'equalizer':
+    case "equalizer":
       return {
-        hook: 'BACK FROM THE DEAD.',
+        hook: "WE ARE LEVEL!",
         factLine: player
-          ? `${player} levels it at ${minute}. ${score}.`
+          ? `${player} pulls it level at ${minute}. ${score}.`
           : `Level at ${minute}. ${score}.`,
-        punchline: 'This match has misplaced the brakes.',
+        punchline: "Nobody is sitting comfortably now.",
       };
-    case 'late_winner':
+
+    case "late_winner":
       return {
-        hook: 'DELIVERED LATE.',
-        factLine: player ? `${player}, ${minute}. ${score}.` : `${minute}. ${score}.`,
-        punchline: 'Three points at the last possible address.',
+        hook: "LATE DRAMA!",
+        factLine: player
+          ? `${player} strikes at ${minute}. ${score}.`
+          : `Goal at ${minute}. ${score}.`,
+        punchline: "The clock has just become enemy number one.",
       };
-    case 'own_goal':
+
+    case "own_goal":
       return {
-        hook: 'OWN GOAL.',
-        factLine: player ? `${player}, ${minute}. ${score}.` : `${minute}. ${score}.`,
-        punchline: 'Football can be cruel.',
+        hook: "OH, NO.",
+        factLine: player
+          ? `Own goal by ${player} at ${minute}. ${score}.`
+          : `Own goal at ${minute}. ${score}.`,
+        punchline: "Football has found its cruel side again.",
       };
-    case 'red_card':
+
+    case "red_card":
       return {
-        hook: 'EARLY SHOWER.',
-        factLine: `Red card at ${minute}. ${score}.`,
-        punchline: 'The tactical plan has just been fed into the shredder.',
+        hook: "THE MATCH JUST TURNED.",
+        factLine: player
+          ? `${player} is sent off at ${minute}. ${score}.`
+          : `Red card at ${minute}. ${score}.`,
+        punchline: "One card and the tactical plan needs a rewrite.",
       };
-    case 'penalty_saved': {
+
+    case "penalty_saved": {
       const keeper = keeperName(approvedContext);
+
       return {
-        hook: 'NOT TODAY.',
+        hook: "WHAT A STOP!",
         factLine: keeper
-          ? `${keeper} saves the ${minute} penalty. ${score}.`
+          ? `${keeper} saves the penalty at ${minute}. ${score}.`
           : `Penalty saved at ${minute}. ${score}.`,
-        punchline: 'Read it like tomorrow\'s newspaper.',
+        punchline: "The goalkeeper wins that duel emphatically.",
       };
     }
-    case 'penalty_missed':
+
+    case "penalty_missed":
       return {
-        hook: 'PENALTY MISSED.',
-        factLine: player ? `${player}, ${minute}. ${score}.` : `Penalty missed at ${minute}. ${score}.`,
-        punchline: 'Chance gone.',
+        hook: "THE CHANCE IS GONE.",
+        factLine: player
+          ? `${player} misses from the spot at ${minute}. ${score}.`
+          : `Penalty missed at ${minute}. ${score}.`,
+        punchline: "Maximum opportunity. Nothing on the scoreboard.",
       };
-    case 'var_overturn':
+
+    case "var_overturn":
       return {
-        hook: 'NO GOAL. VAR HAS SPOKEN.',
-        factLine: `The ${minute} goal is overturned. It stays ${event.home.score}\u2013${event.away.score}.`,
-        punchline: 'Celebrations returned with the receipt.',
+        hook: "SCRATCH THAT.",
+        factLine:
+          `The ${minute} goal is overturned. ` +
+          `It stays ${event.home.score}\u2013${event.away.score}.`,
+        punchline: "The celebration has been cancelled by VAR.",
       };
-    case 'full_time':
+
+    case "full_time":
       return {
-        hook: 'FULL TIME.',
+        hook: "THAT IS THE WHISTLE.",
         factLine: score,
-        punchline: 'The whistle has the final word.',
+        punchline: "No more arguments. The result is locked in.",
       };
-    case 'goal':
+
+    case "goal":
     default:
       return {
-        hook: 'THAT CHANGES THINGS.',
-        factLine: player ? `${player}, ${minute}. ${score}.` : `${minute}. ${score}.`,
-        punchline: 'The temperature just moved.',
+        hook: "IN IT GOES!",
+        factLine: player
+          ? `${player} scores at ${minute}. ${score}.`
+          : `Goal at ${minute}. ${score}.`,
+        punchline: "The net has delivered the only explanation needed.",
       };
   }
 }
 
 /**
  * Deterministic safe template used when generation or validation fails twice.
- * The event is never missed because of an AI failure.
+ *
+ * The event is never missed because of an AI generation failure.
  */
-export function fallbackTemplate(event: MatchEvent, approvedContext: string[] = []): GeneratedContent {
+export function fallbackTemplate(
+  event: MatchEvent,
+  approvedContext: string[] = [],
+): GeneratedContent {
   const situation = classifySituation(event, approvedContext);
   const candidate = fallbackCandidate(event, situation, approvedContext);
+
   const postText = composePostText(candidate);
   const score = scoreline(event);
   const facts = [minuteLabel(event), score];
-  if (event.player?.name) facts.unshift(event.player.name);
+
+  if (event.player?.name) {
+    facts.unshift(event.player.name);
+  }
+
   return {
     postText,
-    imagePrompt:
-      `Abstract editorial football illustration, stadium lighting, dramatic mood, ` +
-      `colour palette inspired by ${event.home.colours.join('/') || event.home.name} and ` +
-      `${event.away.colours.join('/') || event.away.name}. No logos, no text, no real faces.`,
     altText:
-      `AI-generated editorial football illustration in ${event.home.name} and ${event.away.name} colours. ` +
+      `AI-generated photorealistic editorial football image in ` +
+      `${event.home.name} and ${event.away.name} colours. ` +
       `Overlay: ${candidate.factLine}`,
     referencedFacts: facts,
-    risk: 'low',
+    risk: "low",
   };
 }

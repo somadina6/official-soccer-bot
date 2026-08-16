@@ -23,10 +23,9 @@ export const CommentaryCandidateSchema = z.object({
 });
 export type CommentaryCandidate = z.infer<typeof CommentaryCandidateSchema>;
 
-/** Structured output from the text model: three copy candidates plus artwork fields. */
+/** Structured output from the text model: three copy candidates plus alt text. */
 export const CommentaryModelOutputSchema = z.object({
   candidates: z.array(CommentaryCandidateSchema).length(3),
-  imagePrompt: z.string(),
   altText: z.string(),
   referencedFacts: z.array(z.string()),
   risk: z.enum(['low', 'review', 'reject']),
@@ -35,7 +34,6 @@ export type CommentaryModelOutput = z.infer<typeof CommentaryModelOutputSchema>;
 
 export const GeneratedContentSchema = z.object({
   postText: z.string(),
-  imagePrompt: z.string(),
   altText: z.string(),
   referencedFacts: z.array(z.string()),
   risk: z.enum(['low', 'review', 'reject']),
