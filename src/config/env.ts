@@ -37,6 +37,17 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5.6-luna"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2"),
+  IMAGE_PROVIDER: z.enum(["openai", "replicate"]).default("openai"),
+  REPLICATE_API_TOKEN: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  REPLICATE_IMAGE_MODEL: z.string().min(1).default("xai/grok-imagine-image"),
+  REPLICATE_IMAGE_ASPECT_RATIO: z.string().min(1).default("3:2"),
+  REPLICATE_IMAGE_RESOLUTION: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.enum(["1k", "2k"]).optional(),
+  ),
   IMAGE_GENERATION_DEADLINE_MS: z.coerce
     .number()
     .int()
@@ -58,11 +69,37 @@ const EnvSchema = z.object({
   MAX_POSTS_PER_DAY: z.coerce.number().int().positive().default(100),
 
   SENTRY_DSN: z.string().default(""),
+}).superRefine((env, ctx) => {
+  if (env.IMAGE_PROVIDER === "replicate" && !env.REPLICATE_API_TOKEN) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["REPLICATE_API_TOKEN"],
+      message: "required when IMAGE_PROVIDER is replicate",
+    });
+  }
 });
 
 export type Env = z.infer<typeof EnvSchema>;
 
 let cached: Env | undefined;
+
+/**
+ * Validates an env-shaped object without caching. Used by loadEnv() and tests.
+ */
+export function parseEnv(
+  source: Record<string, string | undefined> = process.env,
+): Env {
+  const parsed = EnvSchema.safeParse({
+    ...source,
+  });
+  if (!parsed.success) {
+    const problems = parsed.error.issues
+      .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
+      .join("\n");
+    throw new Error(`Invalid environment configuration:\n${problems}`);
+  }
+  return parsed.data;
+}
 
 /**
  * Validates process.env once at boot. Throws with a readable list of the
@@ -71,15 +108,6 @@ let cached: Env | undefined;
  */
 export function loadEnv(): Env {
   if (cached) return cached;
-  const parsed = EnvSchema.safeParse({
-    ...process.env,
-  });
-  if (!parsed.success) {
-    const problems = parsed.error.issues
-      .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
-      .join("\n");
-    throw new Error(`Invalid environment configuration:\n${problems}`);
-  }
-  cached = parsed.data;
+  cached = parseEnv();
   return cached;
 }

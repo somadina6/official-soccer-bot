@@ -5,13 +5,13 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v2';
+export const IMAGE_PROMPT_VERSION = 'prompt-v3';
 
 const SHARED_CONSTRAINTS = `
-No scoreboard, lettering, watermark, duplicate people, distorted limbs,
-extra fingers or official branding. No club crests, sponsor marks or
-league logos anywhere. Leave the lower third of the frame calmer so a
-deterministic overlay can be added later.
+No scoreboard, watermark, duplicate people, distorted limbs or extra fingers.
+Kit branding (club crests, sponsor marks, league sleeve patches) is allowed;
+do not invent a scoreboard or overlay lettering.
+Leave the lower third of the frame calmer so a deterministic overlay can be added later.
 `.trim();
 
 const CAMERA_STYLE = `
@@ -23,14 +23,20 @@ grading.
 
 /**
  * The normalized event does not attribute the player to a side, so the kit
- * colour is a best-effort heuristic: a goal is credited to the side the
- * scoreboard currently favours (mirrors the retired background-mood logic).
+ * is a best-effort heuristic: a goal is credited to the side the scoreboard
+ * currently favours (mirrors the retired background-mood logic).
  */
-function kitColourFor(event: MatchEvent): string {
+function kitSideFor(event: MatchEvent): MatchEvent['home'] {
   const homeFavoured = event.home.score >= event.away.score;
-  const scoringSide =
-    event.type === 'OWN_GOAL' ? (homeFavoured ? event.away : event.home) : homeFavoured ? event.home : event.away;
-  return scoringSide.colours[0] ?? '#6CADDF';
+  return event.type === 'OWN_GOAL' ? (homeFavoured ? event.away : event.home) : homeFavoured ? event.home : event.away;
+}
+
+function kitLineFor(event: MatchEvent): string {
+  return `Wearing an authentic ${kitSideFor(event).name} match kit with club crest, sponsor logos, and league badges visible.`;
+}
+
+function bothKitsLine(event: MatchEvent): string {
+  return `Players wearing authentic ${event.home.name} and ${event.away.name} match kits with club crests, sponsor logos, and league badges visible.`;
 }
 
 function subjectFor(event: MatchEvent): string {
@@ -40,8 +46,7 @@ function subjectFor(event: MatchEvent): string {
 /** Builds the photorealistic editorial prompt for one confirmed event. */
 export function buildEventImagePrompt(event: MatchEvent): string {
   const player = subjectFor(event);
-  const kitColor = kitColourFor(event);
-  const kitLine = `Wearing a generic ${kitColor} football kit without logos, badges, sponsors or readable text.`;
+  const kitLine = kitLineFor(event);
 
   switch (event.type) {
     case 'GOAL':
@@ -90,7 +95,7 @@ the pitch during a video review, players with hands on hips looking toward
 the sideline, authentic athletic posture, balanced natural anatomy, realistic
 hands and faces. No screens with readable text.
 
-${CAMERA_STYLE}
+${bothKitsLine(event)} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 `.trim();
@@ -102,7 +107,7 @@ footballers at the final whistle, some embracing, some collapsed to their
 knees on the pitch, authentic athletic posture, balanced natural anatomy,
 realistic hands and faces, mixed elation and dejection.
 
-${CAMERA_STYLE}
+${bothKitsLine(event)} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 `.trim();

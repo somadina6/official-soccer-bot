@@ -4,7 +4,7 @@ import { logger } from '../observability/logger.js';
 import { composeEventImage, solidFallbackBackground } from '../services/visual-composer.js';
 import { storeArtwork } from '../supabase/storage.js';
 import { errorCodeOf, sanitizedErrorMessage } from './errors.js';
-import { generateEventArtwork } from './gpt-image.generator.js';
+import { generateEventArtwork } from './generate-event-artwork.js';
 import {
   claimImageJob,
   IMAGE_READY_STATUSES,

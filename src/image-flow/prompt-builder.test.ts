@@ -18,14 +18,18 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v2');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v3');
   });
 
-  it('uses the player name and kit colour for a goal', () => {
+  it('uses the player name and authentic kit branding for a goal', () => {
     const prompt = buildEventImagePrompt(base);
     expect(prompt).toContain('Erling Haaland');
-    expect(prompt).toContain('#6CADDF');
+    expect(prompt).toContain('Manchester City');
+    expect(prompt).toContain('club crest');
+    expect(prompt).toContain('sponsor logos');
     expect(prompt).toContain('celebrating immediately after scoring');
+    expect(prompt).not.toContain('without logos');
+    expect(prompt).not.toContain('No club crests');
     expect(prompt).not.toContain('1 – 0');
   });
 
@@ -41,5 +45,17 @@ describe('prompt builder', () => {
     expect(buildEventImagePrompt({ ...base, type: 'VAR' })).toContain('video review');
     expect(buildEventImagePrompt({ ...base, type: 'FULL_TIME' })).toContain('final whistle');
     expect(buildEventImagePrompt({ ...base, type: 'OWN_GOAL' })).toContain('celebrating immediately after scoring');
+  });
+
+  it('names both clubs on VAR and full-time prompts', () => {
+    const varPrompt = buildEventImagePrompt({ ...base, type: 'VAR' });
+    expect(varPrompt).toContain('Manchester City');
+    expect(varPrompt).toContain('Arsenal');
+    expect(varPrompt).toContain('club crests');
+
+    const fullTime = buildEventImagePrompt({ ...base, type: 'FULL_TIME' });
+    expect(fullTime).toContain('Manchester City');
+    expect(fullTime).toContain('Arsenal');
+    expect(fullTime).toContain('sponsor logos');
   });
 });
