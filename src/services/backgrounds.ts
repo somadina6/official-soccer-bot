@@ -112,6 +112,7 @@ export async function getBackgroundForEvent(
     if (data) {
       const buffer = Buffer.from(await data.arrayBuffer());
       memoryCache.set(cacheKey(fixtureId, kind), buffer);
+      logger.debug({ fixtureId, kind }, 'background cached from storage');
       return buffer;
     }
   }

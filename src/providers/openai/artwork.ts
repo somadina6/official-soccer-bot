@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { loadEnv } from '../../config/env.js';
+import { logger } from '../../observability/logger.js';
 
 let client: OpenAI | undefined;
 
@@ -47,6 +48,7 @@ export function fixtureBackgroundPrompt(input: FixtureBackgroundInput): string {
  * path without a strict timeout; prepared backgrounds are the fallback. */
 export async function generateBackground(prompt: string): Promise<Buffer> {
   const env = loadEnv();
+  logger.info({ prompt }, 'generating background');
   const result = await getOpenAI().images.generate({
     model: env.OPENAI_IMAGE_MODEL,
     prompt,

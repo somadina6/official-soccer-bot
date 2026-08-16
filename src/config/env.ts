@@ -18,6 +18,7 @@ const EnvSchema = z.object({
   DRY_RUN: boolFromString.default("true"),
   BANTER_TONE: z.enum(["neutral", "playful", "spicy"]).default("playful"),
 
+  SPORTSAPI_ENABLED: boolFromString.default("true"),
   SPORTSAPI_KEY: z.string().min(1),
   SPORTSAPI_BASE_URL: z
     .string()

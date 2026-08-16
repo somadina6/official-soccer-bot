@@ -36,7 +36,7 @@ npm run build && npm start
 
 ## Test without a live match
 
-Keep `DRY_RUN=true`. In one terminal run the worker, in another seed a fake Saka goal:
+Keep `DRY_RUN=true`. If SportsAPI is rate-limiting you (429), set `SPORTSAPI_ENABLED=false` so the worker still starts queue consumers. In one terminal run the worker, in another seed a fake Saka goal:
 
 ```bash
 npm run dev

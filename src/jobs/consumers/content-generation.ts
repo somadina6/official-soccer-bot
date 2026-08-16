@@ -104,6 +104,7 @@ export function startContentGenerationConsumer(): () => void {
       }
 
       if (!approved) {
+        logger.warn({ matchEventId, attempt: 3 }, 'fallback template used');
         const fallback = fallbackTemplate(row.event);
         const result = validateContent(fallback, row.event, recent);
         const generationId = await recordAttempt(

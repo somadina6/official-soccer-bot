@@ -3,6 +3,7 @@ import { zodResponseFormat } from 'openai/helpers/zod';
 import { loadEnv } from '../../config/env.js';
 import { GeneratedContentSchema, type BanterTone, type GeneratedContent } from '../../domain/content.js';
 import type { MatchEvent } from '../../domain/match-event.js';
+import { logger } from '../../observability/logger.js';
 
 let client: OpenAI | undefined;
 
@@ -49,6 +50,7 @@ export type CommentaryInput = {
  * Outputs; truth is enforced separately by the deterministic validator. */
 export async function generateCommentary(input: CommentaryInput): Promise<GeneratedContent> {
   const env = loadEnv();
+  logger.debug({ input }, 'generating commentary');
   const completion = await getOpenAI().beta.chat.completions.parse({
     model: env.OPENAI_TEXT_MODEL,
     messages: [

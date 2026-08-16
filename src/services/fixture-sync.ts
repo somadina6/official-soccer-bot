@@ -1,3 +1,4 @@
+import { loadEnv } from "../config/env.js";
 import { logger } from "../observability/logger.js";
 import {
   discoverPremierLeagueId,
@@ -42,6 +43,13 @@ export async function loadOrDiscoverAndApproveCompetition(): Promise<Competition
       slug: data.slug,
       providerId: Number(data.provider_tournament_id),
     };
+  }
+
+  if (!loadEnv().SPORTSAPI_ENABLED) {
+    throw new Error(
+      "competitions.provider_tournament_id is empty and SPORTSAPI_ENABLED=false. " +
+        "Set SPORTSAPI_ENABLED=true once to discover the Premier League id, or store it manually.",
+    );
   }
 
   logger.info("no stored tournament ID; running SportsAPI discovery");

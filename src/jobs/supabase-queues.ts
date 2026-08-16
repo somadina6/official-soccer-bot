@@ -66,7 +66,7 @@ export async function readFromQueue(
   visibilityTimeout = 60,
   qty = 5,
 ): Promise<ReadMessage[]> {
-  logger.info({ queue, visibilityTimeout, qty }, 'reading from queue');
+  // logger.debug({ queue, visibilityTimeout, qty }, 'reading from queue');
   const rows = await queueRpc<PgmqReadRow[] | null>('read', {
     queue_name: queue,
     sleep_seconds: visibilityTimeout,

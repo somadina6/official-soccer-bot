@@ -4,10 +4,10 @@ import type { MatchEvent } from '../domain/match-event.js';
 import { QUEUES, sendToQueue } from '../jobs/supabase-queues.js';
 import { getSupabase } from '../supabase/client.js';
 
-const TEST_PROVIDER_MATCH_ID = 999_000_001;
+const TEST_PROVIDER_MATCH_ID = 999_000_002;
 
 /**
- * Inserts a fake Arsenal–Chelsea goal and enqueues content-generation so the
+ * Inserts a fake ManCity–Arsenal goal and enqueues content-generation so the
  * running worker can exercise commentary + image + dry-run publish without a
  * live Premier League match. Confirmation is skipped on purpose.
  */
@@ -27,8 +27,8 @@ async function main(): Promise<void> {
     );
   }
 
-  const homeTeam = { id: 1, name: 'Arsenal', colours: ['#EF0107', '#FFFFFF'] };
-  const awayTeam = { id: 2, name: 'Chelsea', colours: ['#034694', '#FFFFFF'] };
+  const homeTeam = { id: 1, name: 'ManCity', colours: ['#6C2423', '#FFFFFF'] };
+  const awayTeam = { id: 2, name: 'Arsenal', colours: ['#EF0107', '#FFFFFF'] };
 
   const { data: fixture, error: fixtureError } = await supabase
     .from('fixtures')
@@ -62,9 +62,9 @@ async function main(): Promise<void> {
     status: 'CONFIRMED',
     minute: 67,
     occurredAt: new Date().toISOString(),
-    home: { id: '1', name: 'Arsenal', score: 2, colours: homeTeam.colours },
-    away: { id: '2', name: 'Chelsea', score: 1, colours: awayTeam.colours },
-    player: { id: '10', name: 'Saka' },
+    home: { id: '1', name: 'ManCity', score: 2, colours: homeTeam.colours },
+    away: { id: '2', name: 'Arsenal', score: 1, colours: awayTeam.colours },
+    player: { id: '10', name: 'Foden' },
     rawPayloadHash: createHash('sha256').update(incidentId).digest('hex'),
   };
   const idempotencyKey = `sportsapi-pro:${TEST_PROVIDER_MATCH_ID}:${incidentId}:0`;
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`
-Seeded a test GOAL (Saka, 67', Arsenal 2–1 Chelsea).
+Seeded a test GOAL (Foden, 67', ManCity 2–1 Arsenal).
 
   fixture_id:      ${fixture.id}
   match_event_id:  ${inserted.id}
