@@ -5,7 +5,7 @@
   "description": "Premier League AI commentary bot: detects live match events, generates commentary + AI artwork, and publishes to X.",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "DEV_LOGS=1 tsx watch --env-file=.env.local src/index.ts",

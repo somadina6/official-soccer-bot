@@ -1,0 +1,61 @@
+{
+  "name": "official-soccer-bot",
+  "description": "Always-on Premier League commentary worker (queues, SportsAPI WebSocket, optional admin API).",
+  "stack": "heroku-24",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "env": {
+    "NODE_ENV": {
+      "description": "Runtime environment.",
+      "value": "production"
+    },
+    "DRY_RUN": {
+      "description": "Generate content but do not post to X.",
+      "value": "true"
+    },
+    "PUBLISHING_ENABLED": {
+      "description": "Global kill switch. Must also be true in the database to post.",
+      "value": "false"
+    },
+    "SPORTSAPI_KEY": {
+      "description": "SportsAPI Pro Football V2 API key."
+    },
+    "SUPABASE_URL": {
+      "description": "Supabase project URL."
+    },
+    "SUPABASE_SECRET_KEY": {
+      "description": "Supabase secret key (sb_secret_...) or legacy service_role JWT."
+    },
+    "SUPABASE_DB_URL": {
+      "description": "Direct Postgres URL for pgmq queue operations."
+    },
+    "SUPABASE_STORAGE_BUCKET": {
+      "description": "Private storage bucket for generated artwork.",
+      "value": "generated-match-media"
+    },
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key."
+    },
+    "TWITTER_CONSUMER_KEY": {
+      "description": "X OAuth 1.0a consumer key."
+    },
+    "TWITTER_CONSUMER_SECRET": {
+      "description": "X OAuth 1.0a consumer secret."
+    },
+    "TWITTER_ACCESS_TOKEN": {
+      "description": "X OAuth 1.0a user access token."
+    },
+    "TWITTER_ACCESS_SECRET": {
+      "description": "X OAuth 1.0a user access token secret."
+    }
+  }
+}
