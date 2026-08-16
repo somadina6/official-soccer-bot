@@ -57,6 +57,7 @@ export function validateContent(
   content: GeneratedContent,
   event: MatchEvent,
   recentPosts: string[],
+  approvedContext: string[] = [],
 ): ValidationResult {
   const errors: string[] = [];
   const text = content.postText;
@@ -95,6 +96,9 @@ export function validateContent(
       .filter((n): n is number => n !== undefined)
       .map(String),
   );
+  for (const fact of approvedContext) {
+    for (const digit of fact.match(/\d+/g) ?? []) allowedNumbers.add(digit);
+  }
   for (const digit of digits) {
     if (!allowedNumbers.has(digit)) errors.push(`unexpected number "${digit}" not present in the event`);
   }

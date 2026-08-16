@@ -26,6 +26,7 @@ function commentaryPolicy(tone: BanterTone): string {
     `Tone: ${tone}. ${TONE_GUIDANCE[tone]}`,
     'HARD RULES:',
     '- You may ONLY use facts present in the event JSON or the provided context dictionary. Never invent facts, statistics, records or history.',
+    '- Context dictionary entries that describe how the incident happened (body part, placement, position, open play vs penalty) are verified provider facts. Use them when they fit; do not require them.',
     '- Maximum 240 characters of post text.',
     '- No URLs, hashtags spam, or betting advice.',
     '- No slurs, protected-class references, abuse about appearance, mockery of injury or tragedy, sexual content, referee-corruption claims, or match-fixing allegations.',

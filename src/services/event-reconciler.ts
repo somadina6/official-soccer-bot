@@ -2,7 +2,9 @@ import { z } from 'zod';
 import type { MatchEvent } from '../domain/match-event.js';
 import { logger } from '../observability/logger.js';
 import {
+  canonicalTournamentId,
   extractIncidents,
+  extractMatchDetails,
   normalizeIncident,
   teamIdFromUnknown,
   type MatchContext,
@@ -22,6 +24,7 @@ const TeamJsonSchema = z
     score: z.number().int().optional(),
     colours: z.array(z.string()).optional(),
     colors: z.object({ primary: z.string().optional(), secondary: z.string().optional() }).optional(),
+    teamColors: z.object({ primary: z.string().optional(), secondary: z.string().optional() }).optional(),
   })
   .passthrough();
 
@@ -30,7 +33,9 @@ function toTeamSide(raw: unknown, fallbackName: string) {
   const team = parsed.success ? parsed.data : {};
   const colours =
     team.colours ??
-    [team.colors?.primary, team.colors?.secondary].filter((c): c is string => Boolean(c));
+    [team.teamColors?.primary, team.teamColors?.secondary, team.colors?.primary, team.colors?.secondary].filter(
+      (c): c is string => Boolean(c),
+    );
   return {
     id: team.id !== undefined ? String(team.id) : 'unknown',
     name: team.name ?? fallbackName,
@@ -262,16 +267,16 @@ export async function discoverUnexpectedLiveFixture(
     const matchId = String(parsed.data.id);
     if (allowed.has(matchId)) continue;
 
-    let match: { tournament?: { id?: number }; startTimestamp?: number; homeTeam?: unknown; awayTeam?: unknown };
+    let match: ReturnType<typeof extractMatchDetails>;
     try {
-      const full = (await fetchMatch(matchId)) as { data?: typeof match };
-      match = full?.data ?? {};
+      match = extractMatchDetails(await fetchMatch(matchId));
     } catch {
       continue;
     }
+    if (!match) continue;
     const homeId = teamIdFromUnknown(match.homeTeam);
     const awayId = teamIdFromUnknown(match.awayTeam);
-    const isPremierLeague = match.tournament?.id === premierLeagueTournamentId;
+    const isPremierLeague = canonicalTournamentId(match) === premierLeagueTournamentId;
     const isWatchedClub =
       (homeId !== undefined && watchedTeamIds.has(homeId)) ||
       (awayId !== undefined && watchedTeamIds.has(awayId));

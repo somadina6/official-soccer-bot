@@ -117,9 +117,13 @@ export async function fetchSchedule(date: string): Promise<unknown> {
   return sportsGet<unknown>(`/schedule/${date}`);
 }
 
-/** Live matches across football; the recovery fallback for in-progress games. */
+/**
+ * Live matches across football with nested team/tournament objects.
+ * `/live` is a simplified flat list (string names, no ids); `/live/all` is
+ * the recovery source that can be filtered by uniqueTournament and team id.
+ */
 export async function fetchLiveMatches(): Promise<unknown> {
-  return sportsGet<unknown>('/live');
+  return sportsGet<unknown>('/live/all');
 }
 
 /** Full match payload used to verify tournament membership of a live match. */

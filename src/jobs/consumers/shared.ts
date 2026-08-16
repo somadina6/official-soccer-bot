@@ -17,12 +17,13 @@ export type EventRow = {
   state: string;
   event_type: string;
   event: MatchEvent;
+  rawPayload: unknown;
 };
 
 export async function loadEvent(matchEventId: number): Promise<EventRow> {
   const { data, error } = await getSupabase()
     .from('match_events')
-    .select('id, idempotency_key, fixture_id, state, event_type, normalized')
+    .select('id, idempotency_key, fixture_id, state, event_type, normalized, raw_payload')
     .eq('id', matchEventId)
     .single();
   if (error || !data) throw new Error(`match_event ${matchEventId} not found: ${error?.message}`);
@@ -33,5 +34,6 @@ export async function loadEvent(matchEventId: number): Promise<EventRow> {
     state: data.state,
     event_type: data.event_type,
     event: MatchEventSchema.parse(data.normalized),
+    rawPayload: data.raw_payload,
   };
 }

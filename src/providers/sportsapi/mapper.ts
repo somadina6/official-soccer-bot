@@ -7,21 +7,28 @@ import type { MatchEvent, MatchEventType } from '../../domain/match-event.js';
  * SportsAPI Pro's payload shapes; everything downstream consumes the stable
  * internal `MatchEvent` schema.
  *
- * Phase 0/2 requirement: validate these schemas against recorded live
- * responses and add fixtures for goals, own goals, red cards, VAR reversals
- * and full time before trusting them in production.
+ * Shapes were validated against live Football V2 responses (search, schedule,
+ * /live/all, /match/{id}, /match/{id}/incidents). Store
+ * `tournament.uniqueTournament.id`, never the per-season `tournament.id`.
  */
 
 export function hashPayload(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
-// ── Schedule extraction ───────────────────────────────────────────────────────
+// ── Schedule / live extraction ────────────────────────────────────────────────
+
+const TournamentSchema = z
+  .object({
+    id: z.number(),
+    uniqueTournament: z.object({ id: z.number() }).passthrough().optional(),
+  })
+  .passthrough();
 
 const ScheduledMatchSchema = z.object({
   id: z.number(),
   startTimestamp: z.number(),
-  tournament: z.object({ id: z.number() }),
+  tournament: TournamentSchema,
   homeTeam: z.unknown(),
   awayTeam: z.unknown(),
 });
@@ -38,6 +45,11 @@ export function teamIdFromUnknown(team: unknown): number | undefined {
   return Number.isFinite(id) ? id : undefined;
 }
 
+/** Canonical competition id: uniqueTournament.id, falling back to tournament.id. */
+export function canonicalTournamentId(match: ScheduledMatch): number {
+  return match.tournament.uniqueTournament?.id ?? match.tournament.id;
+}
+
 export function matchInvolvesTeam(match: ScheduledMatch, teamIds: Set<number>): boolean {
   if (teamIds.size === 0) return false;
   const home = teamIdFromUnknown(match.homeTeam);
@@ -50,90 +62,144 @@ export function shouldWatchMatch(
   premierLeagueTournamentId: number,
   watchedTeamIds: Set<number>,
 ): boolean {
-  return match.tournament.id === premierLeagueTournamentId || matchInvolvesTeam(match, watchedTeamIds);
+  return (
+    canonicalTournamentId(match) === premierLeagueTournamentId ||
+    matchInvolvesTeam(match, watchedTeamIds)
+  );
 }
 
-const SchedulePayloadSchema = z.object({
-  data: z.object({
-    // The schedule endpoint groups the date by tournament; each group carries
-    // its matches. Unknown groups are tolerated and skipped.
-    tournaments: z
-      .array(z.object({ matches: z.array(z.unknown()).default([]) }))
-      .default([]),
-  }),
-});
+/** `/schedule/{date}` uses top-level `events`; `/live/all` nests them under `data`. */
+function extractEventList(payload: unknown): unknown[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const obj = payload as Record<string, unknown>;
+  if (Array.isArray(obj.events)) return obj.events;
+  if (obj.data && typeof obj.data === 'object') {
+    const data = obj.data as Record<string, unknown>;
+    if (Array.isArray(data.events)) return data.events;
+  }
+  return [];
+}
 
-/** Extracts and validates scheduled matches from a raw schedule payload. */
-export function extractScheduledMatches(payload: unknown): ScheduledMatch[] {
-  const parsed = SchedulePayloadSchema.safeParse(payload);
-  if (!parsed.success) return [];
-
+function parseScheduledMatches(events: unknown[]): ScheduledMatch[] {
   const matches: ScheduledMatch[] = [];
-  for (const group of parsed.data.data.tournaments) {
-    for (const raw of group.matches) {
-      const match = ScheduledMatchSchema.safeParse(raw);
-      if (match.success) matches.push(match.data);
-    }
+  for (const raw of events) {
+    const match = ScheduledMatchSchema.safeParse(raw);
+    if (match.success) matches.push(match.data);
   }
   return matches;
 }
 
-// ── Live match extraction (recovery path) ────────────────────────────────────
+/** Extracts and validates scheduled matches from a raw `/schedule/{date}` payload. */
+export function extractScheduledMatches(payload: unknown): ScheduledMatch[] {
+  return parseScheduledMatches(extractEventList(payload));
+}
 
-const LiveMatchSchema = z.object({
-  id: z.number(),
-  startTimestamp: z.number(),
-  tournament: z.object({ id: z.number() }),
-  homeTeam: z.unknown(),
-  awayTeam: z.unknown(),
-});
-
-const LivePayloadSchema = z.object({
-  data: z.object({ matches: z.array(z.unknown()).default([]) }),
-});
-
+/** Extracts live matches from `/live/all` (full nested events, not the flat `/live` list). */
 export function extractLiveMatches(payload: unknown): ScheduledMatch[] {
-  const parsed = LivePayloadSchema.safeParse(payload);
-  if (!parsed.success) return [];
-  return parsed.data.data.matches
-    .map(raw => LiveMatchSchema.safeParse(raw))
-    .filter(result => result.success)
-    .map(result => result.data);
+  return parseScheduledMatches(extractEventList(payload));
+}
+
+/**
+ * Unwraps `/match/{id}`: the event lives at `match` or `data.event`, not on `data`.
+ */
+export function extractMatchDetails(payload: unknown): ScheduledMatch | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+  const obj = payload as Record<string, unknown>;
+  const nestedData = obj.data && typeof obj.data === 'object' ? (obj.data as Record<string, unknown>) : undefined;
+  for (const candidate of [obj.match, nestedData?.event, obj]) {
+    const parsed = ScheduledMatchSchema.safeParse(candidate);
+    if (parsed.success) return parsed.data;
+  }
+  return undefined;
 }
 
 // ── Incident normalization ───────────────────────────────────────────────────
 
-const IncidentSchema = z.object({
-  id: z.union([z.string(), z.number()]).optional(),
-  type: z.string(),
-  minute: z.number().int().default(0),
-  addedTime: z.number().int().optional(),
-  time: z.number().optional(), // unix seconds when the incident occurred
-  isConfirmed: z.boolean().optional(),
-  isCancelled: z.boolean().optional(),
-  player: z.object({ id: z.union([z.string(), z.number()]).optional(), name: z.string() }).optional(),
-  assist: z.object({ id: z.union([z.string(), z.number()]).optional(), name: z.string() }).optional(),
-  homeScore: z.number().int().optional(),
-  awayScore: z.number().int().optional(),
-});
+const PlayerSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).optional(),
+    name: z.string(),
+    position: z.string().optional(),
+  })
+  .passthrough();
+
+const GoalActionSchema = z
+  .object({
+    eventType: z.string().optional(),
+    bodyPart: z.string().optional(),
+    situation: z.string().optional(),
+    goalMouthLocation: z.string().optional(),
+    goalkeeper: z.object({ name: z.string() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const IncidentSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).optional(),
+    incidentType: z.string().optional(),
+    type: z.string().optional(),
+    incidentClass: z.string().optional(),
+    text: z.string().optional(),
+    time: z.number().optional(),
+    minute: z.number().int().optional(),
+    addedTime: z.number().int().optional(),
+    isHome: z.boolean().optional(),
+    reason: z.string().optional(),
+    rescinded: z.boolean().optional(),
+    isConfirmed: z.boolean().optional(),
+    isCancelled: z.boolean().optional(),
+    player: PlayerSchema.optional(),
+    assist: PlayerSchema.optional(),
+    assist1: PlayerSchema.optional(),
+    homeScore: z.number().int().optional(),
+    awayScore: z.number().int().optional(),
+    footballPassingNetworkAction: z.array(z.unknown()).optional(),
+  })
+  .passthrough();
 
 export type ProviderIncident = z.infer<typeof IncidentSchema>;
+
+function compactKey(value: string): string {
+  return value.toLowerCase().replace(/[_\-\s]/g, '');
+}
 
 /** Provider incident-type strings mapped into the internal event taxonomy. */
 const TYPE_MAP: Record<string, MatchEventType> = {
   goal: 'GOAL',
-  own_goal: 'OWN_GOAL',
   owngoal: 'OWN_GOAL',
-  red_card: 'RED_CARD',
   redcard: 'RED_CARD',
-  second_yellow: 'RED_CARD',
-  penalty_missed: 'PENALTY_MISSED',
-  penalty_saved: 'PENALTY_MISSED',
+  red: 'RED_CARD',
+  secondyellow: 'RED_CARD',
+  yellowred: 'RED_CARD',
+  penaltymissed: 'PENALTY_MISSED',
+  penaltysaved: 'PENALTY_MISSED',
+  missedpenalty: 'PENALTY_MISSED',
   var: 'VAR',
-  var_decision: 'VAR',
-  full_time: 'FULL_TIME',
-  match_ended: 'FULL_TIME',
+  vardecision: 'VAR',
+  fulltime: 'FULL_TIME',
+  matchended: 'FULL_TIME',
 };
+
+function mapIncidentType(incident: ProviderIncident): MatchEventType | null {
+  const rawType = compactKey(incident.incidentType ?? incident.type ?? '');
+  const klass = compactKey(incident.incidentClass ?? '');
+  const text = (incident.text ?? '').trim().toLowerCase();
+
+  if (rawType === 'goal' || rawType === 'owngoal') {
+    return rawType === 'owngoal' || klass === 'owngoal' ? 'OWN_GOAL' : 'GOAL';
+  }
+  if (rawType === 'card') {
+    if (klass === 'red' || klass === 'yellowred' || klass === 'secondyellow') return 'RED_CARD';
+    return null;
+  }
+  if (rawType === 'period') {
+    if (text === 'ft' || text === 'full time' || text === 'full-time' || text === 'ended') {
+      return 'FULL_TIME';
+    }
+    return null;
+  }
+  return TYPE_MAP[rawType] ?? null;
+}
 
 export type MatchContext = {
   matchId: string;
@@ -141,6 +207,8 @@ export type MatchContext = {
   home: { id: string; name: string; score: number; colours: string[] };
   away: { id: string; name: string; score: number; colours: string[] };
 };
+
+const ADDED_TIME_SENTINEL = 999;
 
 /**
  * Normalizes one provider incident into a `MatchEvent`, or null when the
@@ -152,7 +220,7 @@ export function normalizeIncident(raw: unknown, context: MatchContext): MatchEve
   if (!parsed.success) return null;
   const incident = parsed.data;
 
-  const type = TYPE_MAP[incident.type.toLowerCase()];
+  const type = mapIncidentType(incident);
   if (!type) return null;
 
   const home = { ...context.home };
@@ -160,40 +228,117 @@ export function normalizeIncident(raw: unknown, context: MatchContext): MatchEve
   if (incident.homeScore !== undefined) home.score = incident.homeScore;
   if (incident.awayScore !== undefined) away.score = incident.awayScore;
 
+  const minute = Math.max(0, Math.trunc(incident.minute ?? incident.time ?? 0));
+  const assist = incident.assist1 ?? incident.assist;
+  const overturned = incident.rescinded === true || incident.isCancelled === true;
+
   const event: MatchEvent = {
     provider: 'sportsapi-pro',
     matchId: context.matchId,
     competitionId: context.competitionId,
     type,
-    status: incident.isCancelled ? 'OVERTURNED' : incident.isConfirmed ? 'CONFIRMED' : 'PROVISIONAL',
-    minute: incident.minute,
-    occurredAt: new Date((incident.time ?? Date.now() / 1000) * 1000).toISOString(),
+    status: overturned ? 'OVERTURNED' : incident.isConfirmed ? 'CONFIRMED' : 'PROVISIONAL',
+    minute,
+    occurredAt: new Date().toISOString(),
     home,
     away,
     rawPayloadHash: hashPayload(raw),
   };
 
   if (incident.id !== undefined) event.incidentId = String(incident.id);
-  if (incident.addedTime !== undefined) event.stoppageMinute = incident.addedTime;
+  if (
+    incident.addedTime !== undefined &&
+    incident.addedTime >= 0 &&
+    incident.addedTime < ADDED_TIME_SENTINEL
+  ) {
+    event.stoppageMinute = incident.addedTime;
+  }
   if (incident.player) {
     event.player = incident.player.id !== undefined
       ? { id: String(incident.player.id), name: incident.player.name }
       : { name: incident.player.name };
   }
-  if (incident.assist) {
-    event.assist = incident.assist.id !== undefined
-      ? { id: String(incident.assist.id), name: incident.assist.name }
-      : { name: incident.assist.name };
+  if (assist) {
+    event.assist = assist.id !== undefined
+      ? { id: String(assist.id), name: assist.name }
+      : { name: assist.name };
   }
   return event;
 }
 
-const IncidentsPayloadSchema = z.object({
-  data: z.object({ incidents: z.array(z.unknown()).default([]) }),
-});
-
-/** Extracts the raw incident list from a `/match/{id}/incidents` payload. */
+/** Extracts the raw incident list from REST or WebSocket incident payloads. */
 export function extractIncidents(payload: unknown): unknown[] {
-  const parsed = IncidentsPayloadSchema.safeParse(payload);
-  return parsed.success ? parsed.data.data.incidents : [];
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  const obj = payload as Record<string, unknown>;
+  if (Array.isArray(obj.incidents)) return obj.incidents;
+  if (obj.data && typeof obj.data === 'object') {
+    const data = obj.data as Record<string, unknown>;
+    if (Array.isArray(data.incidents)) return data.incidents;
+  }
+  return [];
+}
+
+const POSITION_LABEL: Record<string, string> = {
+  d: 'defender',
+  m: 'midfielder',
+  f: 'forward',
+  g: 'goalkeeper',
+};
+
+/** Drops anything with digits so commentary validation will not see extra numbers. */
+function digitFreePhrase(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const text = value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  if (!text || text.length > 48 || /\d/.test(text)) return undefined;
+  return text.toLowerCase();
+}
+
+function lastGoalAction(network: unknown[] | undefined) {
+  if (!network) return undefined;
+  for (let i = network.length - 1; i >= 0; i--) {
+    const parsed = GoalActionSchema.safeParse(network[i]);
+    if (parsed.success && parsed.data.eventType === 'goal') return parsed.data;
+  }
+  return undefined;
+}
+
+/**
+ * Whitelisted, digit-free facts from a raw incident for the commentary
+ * context dictionary. Coordinates, jersey numbers, market values and
+ * passing-network teammates are omitted.
+ */
+export function extractApprovedIncidentFacts(raw: unknown): string[] {
+  const parsed = IncidentSchema.safeParse(raw);
+  if (!parsed.success) return [];
+  const incident = parsed.data;
+  const facts: string[] = [];
+
+  const rawType = compactKey(incident.incidentType ?? incident.type ?? '');
+  if (rawType === 'goal' || rawType === 'owngoal') {
+    if (incident.isHome === true) facts.push('scored by the home team');
+    else if (incident.isHome === false) facts.push('scored by the away team');
+  }
+
+  const klass = compactKey(incident.incidentClass ?? '');
+  if (klass === 'regular') facts.push('from open play');
+  else if (klass === 'penalty') facts.push('from a penalty');
+
+  const position = POSITION_LABEL[compactKey(incident.player?.position ?? '')];
+  if (position) facts.push(`player is a ${position}`);
+
+  const reason = digitFreePhrase(incident.reason);
+  if (reason) facts.push(reason);
+
+  const goal = lastGoalAction(incident.footballPassingNetworkAction);
+  const bodyPart = digitFreePhrase(goal?.bodyPart);
+  if (bodyPart) facts.push(bodyPart);
+  const placement = digitFreePhrase(goal?.goalMouthLocation);
+  if (placement) facts.push(placement);
+  const situation = digitFreePhrase(goal?.situation);
+  if (situation === 'assisted') facts.push('assisted');
+  const keeper = digitFreePhrase(goal?.goalkeeper?.name);
+  if (keeper) facts.push(`goalkeeper ${goal!.goalkeeper!.name}`);
+
+  return [...new Set(facts)];
 }

@@ -68,6 +68,19 @@ describe('validateContent', () => {
     expect(result.valid).toBe(false);
   });
 
+  it('allows qualitative incident facts from the approved context', () => {
+    const result = validateContent(
+      {
+        ...validContent,
+        postText: "Saka, 67'. Arsenal 2–1 Chelsea. Left foot, low left, from open play.",
+      },
+      goalEvent,
+      [],
+      ['from open play', 'left foot', 'low left', 'player is a defender'],
+    );
+    expect(result).toEqual({ valid: true });
+  });
+
   it('rejects URLs', () => {
     const result = validateContent(
       { ...validContent, postText: validContent.postText.replace('noise.', 'noise. https://x.com') },

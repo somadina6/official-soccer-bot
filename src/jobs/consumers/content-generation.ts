@@ -2,6 +2,7 @@ import { loadEnv } from '../../config/env.js';
 import type { GeneratedContent } from '../../domain/content.js';
 import { logger } from '../../observability/logger.js';
 import { fallbackTemplate, generateCommentary } from '../../providers/openai/commentary.js';
+import { extractApprovedIncidentFacts } from '../../providers/sportsapi/mapper.js';
 import { validateContent } from '../../services/content-policy.js';
 import { loadRuntimeSettings } from '../../services/settings.js';
 import { getSupabase } from '../../supabase/client.js';
@@ -12,7 +13,8 @@ import { loadEvent, setEventState } from './shared.js';
 
 /**
  * Operator-approved rivalry/context lines. Kept deliberately small; the model
- * may not use any fact outside the event payload and this dictionary.
+ * may not use any fact outside the event payload, these lines, and the
+ * whitelisted incident facts extracted from the raw provider payload.
  */
 const APPROVED_CONTEXT: string[] = [
   'North London is Arsenal and Tottenham territory.',
@@ -76,6 +78,10 @@ export function startContentGenerationConsumer(): () => void {
 
       const settings = await loadRuntimeSettings();
       const recent = await recentPostTexts();
+      const contextDictionary = [
+        ...APPROVED_CONTEXT,
+        ...extractApprovedIncidentFacts(row.rawPayload),
+      ];
 
       let approved: { content: GeneratedContent; generationId: number } | undefined;
 
@@ -85,14 +91,14 @@ export function startContentGenerationConsumer(): () => void {
           content = await generateCommentary({
             event: row.event,
             tone: settings.banterTone,
-            contextDictionary: APPROVED_CONTEXT,
+            contextDictionary,
             recentOpenings: recent,
           });
         } catch (error) {
           logger.warn({ matchEventId, attempt, error }, 'commentary generation call failed');
           continue;
         }
-        const result = validateContent(content, row.event, recent);
+        const result = validateContent(content, row.event, recent, contextDictionary);
         const generationId = await recordAttempt(
           matchEventId,
           attempt,
@@ -107,7 +113,7 @@ export function startContentGenerationConsumer(): () => void {
       if (!approved) {
         logger.warn({ matchEventId, attempt: 3 }, 'fallback template used');
         const fallback = fallbackTemplate(row.event);
-        const result = validateContent(fallback, row.event, recent);
+        const result = validateContent(fallback, row.event, recent, contextDictionary);
         const generationId = await recordAttempt(
           matchEventId,
           3,
