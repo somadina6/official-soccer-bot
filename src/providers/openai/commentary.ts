@@ -39,8 +39,13 @@ const TONE_GUIDANCE: Record<BanterTone, string> = {
   playful:
     "Enthusiastic live reaction with light, unmistakably playful banter about defending, finishing, tactics or the match situation.",
 
-  spicy:
-    "Bold, high-energy reaction with a sharper football joke. Be cutting about the incident, never cruel about the person.",
+  spicy: [
+    "Use bold Football Twitter energy and a sharper incident-specific joke.",
+    "Sound shamelessly confident, dramatic and ready for rival replies.",
+    "Exaggerate the emotional reaction, never the underlying facts.",
+    "Attack the football decision or performance, never the person’s identity,",
+    "appearance, injury or private life.",
+  ].join(" "),
 };
 
 const BANNED_CLICHE_PROMPT = [
@@ -61,6 +66,16 @@ function commentaryPolicy(
   style: CommentaryStyle,
   situation: CommentarySituation,
 ): string {
+  const candidateGuidance =
+    style === "timeline"
+      ? [
+          "- Candidate one: explosive timeline reaction.",
+          "- Candidate two: shamelessly confident rival-banter angle.",
+        ]
+      : [
+          "- Candidate one: explosive and immediate.",
+          "- Candidate two: quick football wit.",
+        ];
   return [
     "You write immediate Premier League reactions for X as a lively, informed and quick-witted football fan.",
     "The account is club-neutral, but it is not emotionally neutral.",
@@ -82,8 +97,7 @@ function commentaryPolicy(
     "  punchline — one sharp, incident-specific observation, reaction or piece of banter.",
     "- The published post is those three lines joined with newline characters.",
     "- Target 150–220 characters per candidate. Absolute maximum: 240.",
-    "- Candidate one should feel explosive and immediate.",
-    "- Candidate two should emphasize quick football wit.",
+    ...candidateGuidance,
     "- Both must follow the assigned style, but approach the event from different angles.",
     "",
     "HOOKS:",
@@ -98,6 +112,15 @@ function commentaryPolicy(
     `Assigned style for both candidates: ${style}. ${STYLE_GUIDANCE[style]}`,
     `Confirmed situation: ${situation}. ${SITUATION_GUIDANCE[situation]}`,
     "",
+    "TIMELINE MODE:",
+    "- When the assigned style is timeline, prioritize personality over polished commentary.",
+    "- React with shameless confidence, playful disbelief or exaggerated certainty.",
+    "- The emotional reaction may be dramatic, but every factual statement must remain verified.",
+    "- Directly address the team, defence, goalkeeper or match situation when it creates stronger banter.",
+    "- Use occasional conversational phrasing, but do not repeat one catchphrase across posts.",
+    "- Create reply-worthy tension without manufacturing controversy.",
+    "- Do not imitate or name any real social-media creator.",
+    "- Do not deliberately post false predictions or claims as engagement bait.",
     "VOICE:",
     "- Sound like an intelligent football fan enjoying the chaos, not a notification service.",
     "- The fact line may be factual without becoming robotic.",
