@@ -38,6 +38,15 @@ function tournamentCountry(entity: SearchResponse['data']['results'][number]['en
   ).toLowerCase();
 }
 
+function teamCountry(entity: SearchResponse['data']['results'][number]['entity']): string {
+  return (
+    entity.country?.name ??
+    entity.category?.country?.name ??
+    entity.category?.name ??
+    ''
+  ).toLowerCase();
+}
+
 /**
  * Discovers the English Premier League tournament ID via search. Entity IDs
  * must be discovered dynamically, never hardcoded. Throws when the match is
@@ -67,6 +76,36 @@ export async function discoverPremierLeagueId(): Promise<{
     );
   }
   return { id: candidates[0]!.entity.id, candidates: result.data.results };
+}
+
+/**
+ * Discovers a club team id. Requires an exact name + country match and a
+ * unique `team` result so youth/women's sides are not chosen silently.
+ */
+export async function discoverTeamId(expectedName: string, expectedCountry: string): Promise<number> {
+  const result = await sportsGet<SearchResponse>(
+    '/search?q=' + encodeURIComponent(expectedName),
+  );
+  const name = expectedName.toLowerCase();
+  const country = expectedCountry.toLowerCase();
+  const candidates = result.data.results.filter(({ type, entity }) => {
+    const isTeam = type === 'team';
+    const genderOk = !entity.gender || entity.gender === 'M';
+    return (
+      isTeam &&
+      entity.name.toLowerCase() === name &&
+      teamCountry(entity) === country &&
+      genderOk
+    );
+  });
+
+  if (candidates.length !== 1) {
+    throw new Error(
+      `Expected exactly one ${expectedCountry} team named "${expectedName}"; found ${candidates.length}. ` +
+        'Manual review required before storing a provider team ID.',
+    );
+  }
+  return candidates[0]!.entity.id;
 }
 
 /** Raw date schedule payload; parsed by the mapper against recorded fixtures. */

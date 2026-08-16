@@ -28,6 +28,31 @@ const ScheduledMatchSchema = z.object({
 
 export type ScheduledMatch = z.infer<typeof ScheduledMatchSchema>;
 
+const TeamIdSchema = z.object({ id: z.union([z.number(), z.string()]) }).passthrough();
+
+/** Reads a provider team id from a homeTeam/awayTeam object. */
+export function teamIdFromUnknown(team: unknown): number | undefined {
+  const parsed = TeamIdSchema.safeParse(team);
+  if (!parsed.success) return undefined;
+  const id = Number(parsed.data.id);
+  return Number.isFinite(id) ? id : undefined;
+}
+
+export function matchInvolvesTeam(match: ScheduledMatch, teamIds: Set<number>): boolean {
+  if (teamIds.size === 0) return false;
+  const home = teamIdFromUnknown(match.homeTeam);
+  const away = teamIdFromUnknown(match.awayTeam);
+  return (home !== undefined && teamIds.has(home)) || (away !== undefined && teamIds.has(away));
+}
+
+export function shouldWatchMatch(
+  match: ScheduledMatch,
+  premierLeagueTournamentId: number,
+  watchedTeamIds: Set<number>,
+): boolean {
+  return match.tournament.id === premierLeagueTournamentId || matchInvolvesTeam(match, watchedTeamIds);
+}
+
 const SchedulePayloadSchema = z.object({
   data: z.object({
     // The schedule endpoint groups the date by tournament; each group carries

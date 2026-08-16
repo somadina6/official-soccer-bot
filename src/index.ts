@@ -10,6 +10,7 @@ import {
   reconcileCurrentlyLive,
   type Competition,
 } from './services/fixture-sync.js';
+import { discoverWatchedClubs } from './services/watched-clubs.js';
 import {
   discoverUnexpectedLiveFixture,
   ingestAndDiff,
@@ -30,7 +31,7 @@ async function trySportsStep(label: string, fn: () => Promise<unknown>): Promise
  * Cold-start sequence (section 4):
  *  1. Validate secrets and connect to Supabase.
  *  2. Load/discover the Premier League tournament ID.
- *  3. Sync today's and tomorrow's schedules, filtered by tournament ID.
+ *  3. Sync today's and tomorrow's schedules (Premier League + watched clubs).
  *  4. Reconcile currently live matches as a recovery check.
  *  5–6. Open the WebSocket and subscribe to allow-listed match channels.
  *  7. Snapshots feed the same idempotent diff as updates — never direct tweets.
@@ -54,6 +55,7 @@ async function startWorker(): Promise<void> {
   );
 
   const competition: Competition = await loadOrDiscoverAndApproveCompetition();
+  await discoverWatchedClubs();
 
   let feed: SportsFeed | undefined;
   let stopFixtureSync = () => {};

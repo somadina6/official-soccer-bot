@@ -8,8 +8,10 @@ import {
 import {
   extractLiveMatches,
   extractScheduledMatches,
+  shouldWatchMatch,
 } from "../providers/sportsapi/mapper.js";
 import { getSupabase } from "../supabase/client.js";
+import { loadWatchedTeamIds } from "./watched-clubs.js";
 
 export type Competition = {
   id: number;
@@ -73,8 +75,8 @@ export async function loadOrDiscoverAndApproveCompetition(): Promise<Competition
 }
 
 /**
- * Fetches one date's schedule and upserts only fixtures whose tournament ID
- * matches the stored Premier League ID.
+ * Fetches one date's schedule and upserts Premier League fixtures plus any
+ * other match that involves a watched club.
  */
 export async function syncSchedule(
   date: string,
@@ -82,15 +84,16 @@ export async function syncSchedule(
 ): Promise<number> {
   const payload = await fetchSchedule(date);
   const matches = extractScheduledMatches(payload);
-  const premierLeague = matches.filter(
-    (m) => m.tournament.id === competition.providerId,
+  const watchedTeamIds = await loadWatchedTeamIds();
+  const watched = matches.filter((m) =>
+    shouldWatchMatch(m, competition.providerId, watchedTeamIds),
   );
-  if (premierLeague.length === 0) return 0;
+  if (watched.length === 0) return 0;
 
   const { error } = await getSupabase()
     .from("fixtures")
     .upsert(
-      premierLeague.map((m) => ({
+      watched.map((m) => ({
         provider: "sportsapi-pro",
         provider_match_id: m.id,
         competition_id: competition.id,
@@ -103,20 +106,24 @@ export async function syncSchedule(
     );
   if (error) throw new Error(`fixture upsert failed: ${error.message}`);
 
-  logger.info({ date, fixtures: premierLeague.length }, "schedule synced");
-  return premierLeague.length;
+  logger.info(
+    { date, fixtures: watched.length, watchedClubs: watchedTeamIds.size },
+    "schedule synced",
+  );
+  return watched.length;
 }
 
 /**
- * Recovery check: upserts any live Premier League match missed because of a
- * postponement or schedule change, and marks it live.
+ * Recovery check: upserts any live Premier League or watched-club match
+ * missed because of a postponement or schedule change, and marks it live.
  */
 export async function reconcileCurrentlyLive(
   competition: Competition,
 ): Promise<number> {
   const payload = await fetchLiveMatches();
-  const live = extractLiveMatches(payload).filter(
-    (m) => m.tournament.id === competition.providerId,
+  const watchedTeamIds = await loadWatchedTeamIds();
+  const live = extractLiveMatches(payload).filter((m) =>
+    shouldWatchMatch(m, competition.providerId, watchedTeamIds),
   );
   if (live.length === 0) return 0;
 

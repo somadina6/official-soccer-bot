@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { buildIdempotencyKey } from '../../domain/match-event.js';
 import {
   extractScheduledMatches,
+  matchInvolvesTeam,
   normalizeIncident,
+  shouldWatchMatch,
+  teamIdFromUnknown,
   type MatchContext,
+  type ScheduledMatch,
 } from './mapper.js';
 
 const context: MatchContext = {
@@ -99,5 +103,42 @@ describe('extractScheduledMatches', () => {
   it('returns an empty list for unrecognized payloads', () => {
     expect(extractScheduledMatches({ unexpected: true })).toEqual([]);
     expect(extractScheduledMatches(null)).toEqual([]);
+  });
+});
+
+describe('shouldWatchMatch', () => {
+  const premierLeagueId = 17;
+  const arsenalId = 42;
+  const plMatch: ScheduledMatch = {
+    id: 1,
+    startTimestamp: 1765800000,
+    tournament: { id: premierLeagueId },
+    homeTeam: { id: 99, name: 'Brighton' },
+    awayTeam: { id: 100, name: 'Everton' },
+  };
+  const communityShield: ScheduledMatch = {
+    id: 2,
+    startTimestamp: 1765800000,
+    tournament: { id: 8 },
+    homeTeam: { id: arsenalId, name: 'Arsenal' },
+    awayTeam: { id: 7, name: 'Crystal Palace' },
+  };
+
+  it('reads numeric and string team ids', () => {
+    expect(teamIdFromUnknown({ id: 42 })).toBe(42);
+    expect(teamIdFromUnknown({ id: '42' })).toBe(42);
+    expect(teamIdFromUnknown({ name: 'Arsenal' })).toBeUndefined();
+  });
+
+  it('keeps every Premier League match even with no watched clubs', () => {
+    expect(shouldWatchMatch(plMatch, premierLeagueId, new Set())).toBe(true);
+    expect(shouldWatchMatch(communityShield, premierLeagueId, new Set())).toBe(false);
+  });
+
+  it('adds non-PL matches that involve a watched club', () => {
+    const watched = new Set([arsenalId]);
+    expect(shouldWatchMatch(communityShield, premierLeagueId, watched)).toBe(true);
+    expect(matchInvolvesTeam(communityShield, watched)).toBe(true);
+    expect(shouldWatchMatch(plMatch, premierLeagueId, watched)).toBe(true);
   });
 });

@@ -25,6 +25,8 @@ cp .env.example .env   # fill in real values; placeholders included
 2. Run the migrations in order against your project:
    - `src/supabase/migrations/0001_init.sql` (tables, RLS, seeds)
    - `src/supabase/migrations/0002_queues.sql` (the six logged Basic Queues)
+   - `src/supabase/migrations/0003_queue_rls.sql` (RLS on pgmq tables)
+   - `src/supabase/migrations/0004_watched_clubs.sql` (optional extra-club allow-list)
 3. Optionally create a private Storage bucket named `generated-match-media` (or clear `SUPABASE_STORAGE_BUCKET` to stream images directly to X).
 4. Copy the bot account's OAuth 1.0a user tokens into `TWITTER_CONSUMER_KEY`, `TWITTER_CONSUMER_SECRET`, `TWITTER_ACCESS_TOKEN` and `TWITTER_ACCESS_SECRET` (same names as `twitter-api-v2`). The access token must have read and write permission.
 5. Start the worker:
@@ -56,7 +58,7 @@ The worker boots in the safest possible configuration:
 
 ## How it works
 
-1. **Discovery:** the Premier League tournament ID is discovered via SportsAPI search (never hardcoded) and stored in `competitions`. Today's and tomorrow's schedules are synced on boot, every 6 hours, and after midnight UTC; `/live` is the recovery fallback.
+1. **Discovery:** the Premier League tournament ID is discovered via SportsAPI search (never hardcoded) and stored in `competitions`. Today's and tomorrow's schedules are synced on boot, every 6 hours, and after midnight UTC; `/live` is the recovery fallback. An empty `watched_clubs` table keeps Premier League-only behaviour. Insert a club (e.g. `arsenal` / `Arsenal` / `England`), then restart with `SPORTSAPI_ENABLED=true` once so the team id is discovered — that club's matches in other competitions (Community Shield, UCL, etc.) are then added to the allow-list.
 2. **Ingestion:** one WebSocket subscribes to `live-scores` plus `match:{id}` / `match:{id}:incidents` for allow-listed fixtures. Every payload is normalized into a stable `MatchEvent` and ingested idempotently — replaying the same feed produces zero duplicates.
 3. **Confirmation:** goals wait a 12-second VAR window, then are re-verified against REST incidents before any content is generated. Overturned published goals get a correction posted as a reply.
 4. **Content:** structured-output commentary is validated deterministically (facts, length, banned topics, repetition). Two failures fall back to a safe template so no event is missed.
