@@ -1,3 +1,4 @@
+import { logger } from '../observability/logger.js';
 import { getSupabase } from '../supabase/client.js';
 
 /**
@@ -50,6 +51,7 @@ export async function sendToQueue(
   message: QueueMessage,
   sleepSeconds = 0,
 ): Promise<number> {
+  logger.info({ queue, message, sleepSeconds }, 'sending to queue');
   const msgId = await queueRpc<number | number[]>('send', {
     queue_name: queue,
     message,
@@ -64,6 +66,7 @@ export async function readFromQueue(
   visibilityTimeout = 60,
   qty = 5,
 ): Promise<ReadMessage[]> {
+  logger.info({ queue, visibilityTimeout, qty }, 'reading from queue');
   const rows = await queueRpc<PgmqReadRow[] | null>('read', {
     queue_name: queue,
     sleep_seconds: visibilityTimeout,
@@ -78,11 +81,13 @@ export async function readFromQueue(
 
 /** Archives a successfully processed message for audit (kept in pgmq archive). */
 export async function archiveMessage(queue: QueueName, msgId: number): Promise<void> {
+  logger.info({ queue, msgId }, 'archiving message');
   await queueRpc('archive', { queue_name: queue, message_id: msgId });
 }
 
 /** Deletes a message outright (used after moving it to the dead-letter queue). */
 export async function deleteMessage(queue: QueueName, msgId: number): Promise<void> {
+  logger.info({ queue, msgId }, 'deleting message');
   await queueRpc('delete', { queue_name: queue, message_id: msgId });
 }
 
@@ -92,12 +97,14 @@ export async function deadLetter(
   msg: ReadMessage,
   error: string,
 ): Promise<void> {
+  logger.info({ queue, msg, error }, 'dead-lettering message');
   await sendToQueue(QUEUES.deadLetter, {
     ...msg.message,
     sourceQueue: queue,
     error,
     attempts: msg.readCount,
   });
+  logger.info({ queue, msg, error }, 'inserting job failure');
   const { error: insertError } = await getSupabase().from('job_failures').insert({
     queue_name: queue,
     message: msg.message,
