@@ -5,7 +5,8 @@ import { fallbackTemplate, generateCommentary } from '../../providers/openai/com
 import { validateContent } from '../../services/content-policy.js';
 import { loadRuntimeSettings } from '../../services/settings.js';
 import { getSupabase } from '../../supabase/client.js';
-import { QUEUES, sendToQueue } from '../supabase-queues.js';
+import { QUEUES } from '../supabase-queues.js';
+import { maybeEnqueueXPublishing } from './publish-join.js';
 import { startConsumer } from './runner.js';
 import { loadEvent, setEventState } from './shared.js';
 
@@ -125,11 +126,7 @@ export function startContentGenerationConsumer(): () => void {
       }
 
       await setEventState(matchEventId, 'VALIDATED');
-      await sendToQueue(QUEUES.xPublishing, {
-        idempotencyKey,
-        matchEventId,
-        contentGenerationId: approved.generationId,
-      });
+      await maybeEnqueueXPublishing(matchEventId, idempotencyKey);
     },
     { visibilityTimeout: 120 },
   );

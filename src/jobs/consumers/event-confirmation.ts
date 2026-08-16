@@ -6,8 +6,8 @@ import { loadEvent, setEventState } from './shared.js';
 
 /**
  * Consumes `event-confirmation`: after the delay window, re-verifies the
- * incident against REST and either promotes it to content generation, routes
- * an overturn to corrections, or ignores a vanished incident.
+ * incident against REST and either fans out to content + image generation,
+ * routes an overturn to corrections, or ignores a vanished incident.
  */
 export function startEventConfirmationConsumer(): () => void {
   return startConsumer(QUEUES.eventConfirmation, async msg => {
@@ -23,6 +23,7 @@ export function startEventConfirmationConsumer(): () => void {
     if (result.outcome === 'confirmed') {
       await setEventState(matchEventId, 'CONFIRMED');
       await sendToQueue(QUEUES.contentGeneration, { idempotencyKey, matchEventId });
+      await sendToQueue(QUEUES.imageGeneration, { idempotencyKey, matchEventId });
       return;
     }
 

@@ -32,11 +32,22 @@ const EnvSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SECRET_KEY: z.string().min(1),
   SUPABASE_DB_URL: z.string().min(1),
-  SUPABASE_STORAGE_BUCKET: z.string().default(""),
+  SUPABASE_STORAGE_BUCKET: z.string().min(1),
 
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5.6-luna"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2"),
+  IMAGE_GENERATION_DEADLINE_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(30_000),
+  IMAGE_OUTPUT_COMPRESSION: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(85),
 
   TWITTER_CONSUMER_KEY: z.string().min(1),
   TWITTER_CONSUMER_SECRET: z.string().min(1),

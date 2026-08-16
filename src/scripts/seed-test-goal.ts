@@ -96,6 +96,10 @@ async function main(): Promise<void> {
     idempotencyKey,
     matchEventId: inserted.id,
   });
+  await sendToQueue(QUEUES.imageGeneration, {
+    idempotencyKey,
+    matchEventId: inserted.id,
+  });
 
   console.log(`
 Seeded a test GOAL (Foden, 67', ManCity 2–1 Arsenal).
@@ -103,7 +107,7 @@ Seeded a test GOAL (Foden, 67', ManCity 2–1 Arsenal).
   fixture_id:      ${fixture.id}
   match_event_id:  ${inserted.id}
   idempotency_key: ${idempotencyKey}
-  queue:           ${QUEUES.contentGeneration}
+  queues:          ${QUEUES.contentGeneration}, ${QUEUES.imageGeneration}
 
 Keep \`npm run dev\` running (DRY_RUN=true). Then check Supabase:
 
@@ -112,8 +116,9 @@ Keep \`npm run dev\` running (DRY_RUN=true). Then check Supabase:
        (PUBLISHED only if dry-run is off)
   2. content_generations   match_event_id = ${inserted.id}
        post_text, alt_text, validation_passed
-  3. published_posts       should stay empty while DRY_RUN=true
-  4. Worker logs           "DRY RUN — post not sent to X"
+  3. media_assets          kind = generated_event for this event
+  4. published_posts       should stay empty while DRY_RUN=true
+  5. Worker logs           "DRY RUN — post not sent to X"
 
 Re-run this script to seed another event; each run uses a new incident id.
 `);

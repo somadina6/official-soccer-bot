@@ -1,30 +1,51 @@
 import { loadEnv } from '../config/env.js';
+import { ImageFlowError } from '../image-flow/errors.js';
 import { logger } from '../observability/logger.js';
 import { getSupabase } from './client.js';
 
+function bucket() {
+  return loadEnv().SUPABASE_STORAGE_BUCKET;
+}
+
+function isAlreadyExists(error: { message?: string; statusCode?: string | number | undefined }): boolean {
+  const status = String(error.statusCode ?? '');
+  return status === '409' || /already exists|duplicate/i.test(error.message ?? '');
+}
+
 /**
- * Optionally retains final artwork in the private bucket at
- * `generated-match-media/{season}/{matchId}/{eventId}.webp`. When no bucket
- * is configured the worker streams images directly to X and returns null.
+ * Uploads the finalized JPEG to an immutable, versioned path. `upsert: false`
+ * so a duplicate-object response reuses the existing object instead of
+ * overwriting it (plan section 11).
  */
 export async function storeArtwork(params: {
-  season: string;
-  matchId: string;
-  eventId: string;
+  objectPath: string;
   image: Buffer;
-}): Promise<string | null> {
-  const env = loadEnv();
-  if (!env.SUPABASE_STORAGE_BUCKET) return null;
-
-  const objectPath = `${params.season}/${params.matchId}/${params.eventId}.webp`;
+}): Promise<string> {
   const { error } = await getSupabase()
-    .storage.from(env.SUPABASE_STORAGE_BUCKET)
-    .upload(objectPath, params.image, { contentType: 'image/webp', upsert: true });
+    .storage.from(bucket())
+    .upload(params.objectPath, params.image, {
+      contentType: 'image/jpeg',
+      cacheControl: '31536000',
+      upsert: false,
+    });
 
-  if (error) {
-    // Retention is an audit nicety, not a publishing dependency.
-    logger.warn({ objectPath, error: error.message }, 'artwork retention failed');
-    return null;
+  if (error && !isAlreadyExists(error)) {
+    throw new ImageFlowError('STORAGE_UPLOAD_FAILED', error.message);
   }
-  return objectPath;
+  if (error) {
+    logger.info({ objectPath: params.objectPath }, 'storage object already exists; reusing');
+  }
+  return params.objectPath;
+}
+
+/** Downloads a previously stored JPEG for X re-upload without regenerating. */
+export async function downloadArtwork(objectPath: string): Promise<Buffer> {
+  const { data, error } = await getSupabase().storage.from(bucket()).download(objectPath);
+  if (error || !data) {
+    throw new ImageFlowError(
+      'STORAGE_DOWNLOAD_FAILED',
+      error?.message ?? `empty download for ${objectPath}`,
+    );
+  }
+  return Buffer.from(await data.arrayBuffer());
 }

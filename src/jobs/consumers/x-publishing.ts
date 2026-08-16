@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
+import { findImageJob, IMAGE_READY_STATUSES } from '../../image-flow/image-jobs.js';
 import { logger } from '../../observability/logger.js';
-import { getBackgroundForEvent } from '../../services/backgrounds.js';
 import { publish } from '../../services/publisher.js';
-import { composeEventImage } from '../../services/visual-composer.js';
-import { storeArtwork } from '../../supabase/storage.js';
 import { getSupabase } from '../../supabase/client.js';
+import { downloadArtwork } from '../../supabase/storage.js';
 import { QUEUES } from '../supabase-queues.js';
 import { startConsumer } from './runner.js';
 import { loadEvent, setEventState } from './shared.js';
@@ -22,9 +21,9 @@ async function loadGeneration(contentGenerationId: number) {
 }
 
 /**
- * Consumes `x-publishing`: composes the final image from the prepared
- * background, then publishes idempotently. A retry of the same job finds the
- * existing X post ID and never posts twice (Phase 4 exit criterion).
+ * Consumes `x-publishing`: loads the already-prepared JPEG (or a valid X
+ * media ID), uploads/re-uploads to X if needed, then publishes idempotently.
+ * This consumer never calls OpenAI.
  */
 export function startXPublishingConsumer(): () => void {
   return startConsumer(
@@ -33,14 +32,19 @@ export function startXPublishingConsumer(): () => void {
       const { matchEventId, idempotencyKey } = msg.message;
       const contentGenerationId = Number(msg.message.contentGenerationId);
       const row = await loadEvent(matchEventId);
-      if (row.state === 'PUBLISHED') return; // idempotent replay
+      if (row.state === 'PUBLISHED') return;
+
+      const job = await findImageJob(matchEventId);
+      if (!job?.storage_path || !IMAGE_READY_STATUSES.includes(job.status)) {
+        logger.error({ matchEventId, status: job?.status }, 'x-publishing join fired without a stored image');
+        return;
+      }
 
       const generation = await loadGeneration(contentGenerationId);
       await setEventState(matchEventId, 'PUBLISHING');
 
-      const background = await getBackgroundForEvent(row.fixture_id, row.event);
-      const image = await composeEventImage(background, row.event);
-      const imageHash = createHash('sha256').update(image).digest('hex');
+      const image = await downloadArtwork(job.storage_path);
+      const imageHash = job.image_hash ?? createHash('sha256').update(image).digest('hex');
 
       const result = await publish({
         matchEventId,
@@ -53,12 +57,6 @@ export function startXPublishingConsumer(): () => void {
 
       if (result.status === 'published' || result.status === 'already_published') {
         await setEventState(matchEventId, 'PUBLISHED');
-        await storeArtwork({
-          season: new Date().getUTCFullYear().toString(),
-          matchId: row.event.matchId,
-          eventId: String(matchEventId),
-          image,
-        });
         return;
       }
 

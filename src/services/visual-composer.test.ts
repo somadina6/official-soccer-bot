@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import type { MatchEvent } from '../domain/match-event.js';
-import { composeEventImage, solidFallbackBackground } from './visual-composer.js';
+import {
+  composeEventImage,
+  escapeXml,
+  IMAGE_HEIGHT,
+  IMAGE_WIDTH,
+  solidFallbackBackground,
+  truncateLabel,
+} from './visual-composer.js';
 
 const event: MatchEvent = {
   provider: 'sportsapi-pro',
@@ -18,13 +25,13 @@ const event: MatchEvent = {
 };
 
 describe('visual composer', () => {
-  it('renders a 1024×1024 WebP with the deterministic overlay', async () => {
+  it('renders a 1536×1024 JPEG with the deterministic overlay', async () => {
     const background = await solidFallbackBackground(['#EF0107', '#034694']);
     const image = await composeEventImage(background, event);
     const meta = await sharp(image).metadata();
-    expect(meta.format).toBe('webp');
-    expect(meta.width).toBe(1024);
-    expect(meta.height).toBe(1024);
+    expect(meta.format).toBe('jpeg');
+    expect(meta.width).toBe(IMAGE_WIDTH);
+    expect(meta.height).toBe(IMAGE_HEIGHT);
   });
 
   it('escapes XML-sensitive characters in names', async () => {
@@ -32,7 +39,22 @@ describe('visual composer', () => {
     const tricky = {
       ...event,
       home: { ...event.home, name: 'AT&T <United> "FC"' },
+      player: { id: '10', name: "O'Brien & sons" },
     };
     await expect(composeEventImage(background, tricky)).resolves.toBeInstanceOf(Buffer);
+    expect(escapeXml(`O'Brien & <x>`)).toBe('O&apos;Brien &amp; &lt;x&gt;');
+  });
+
+  it('truncates very long player and team names', async () => {
+    const background = await solidFallbackBackground([]);
+    const long = {
+      ...event,
+      player: { id: '10', name: 'A Very Long Player Name That Would Overflow The Overlay' },
+      home: { ...event.home, name: 'Wolverhampton Wanderers Athletic Club' },
+    };
+    const image = await composeEventImage(background, long);
+    const meta = await sharp(image).metadata();
+    expect(meta.format).toBe('jpeg');
+    expect(truncateLabel('Wolverhampton Wanderers Athletic Club', 22).endsWith('…')).toBe(true);
   });
 });
