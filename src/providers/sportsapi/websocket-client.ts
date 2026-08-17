@@ -16,8 +16,10 @@ export type FeedHandlers = {
    * Called for every snapshot/update on an allow-listed match channel.
    * Snapshots are reconciliation input, not automatic tweets — only a new
    * normalized incident/revision may create a job downstream.
+   * Return `fullTime: true` so the feed unsubscribes `match:{id}` and
+   * `match:{id}:incidents`.
    */
-  onMatchMessage: (message: FeedMessage) => Promise<void>;
+  onMatchMessage: (message: FeedMessage) => Promise<{ fullTime: boolean }>;
   /**
    * Called with `live-scores` data so an unexpected/rescheduled live match can
    * be verified via REST, upserted, and then subscribed. Never publish
@@ -28,8 +30,11 @@ export type FeedHandlers = {
     allowed: Set<string>,
     subscribe: (matchId: string) => void,
   ) => Promise<void>;
-  /** Runs REST reconciliation from the last persisted revision after reconnects. */
-  onReconnected: () => Promise<void>;
+  /**
+   * Runs REST reconciliation from the last persisted revision after reconnects.
+   * Return any match IDs that are now full-time so their channels are dropped.
+   */
+  onReconnected: () => Promise<readonly string[]>;
 };
 
 /**
@@ -51,6 +56,9 @@ export async function activeMatchIds(): Promise<Set<string>> {
 
 export class SportsFeed {
   private ws: WebSocket | undefined;
+  private allowed = new Set<string>();
+  /** Process-lifetime set so live-scores cannot resubscribe a finished match. */
+  private finished = new Set<string>();
   private reconnectAttempt = 0;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private stopped = false;
@@ -61,7 +69,8 @@ export class SportsFeed {
   async connect(): Promise<void> {
     if (this.stopped) return;
     const env = loadEnv();
-    const allowed = await activeMatchIds();
+    this.allowed = await activeMatchIds();
+    for (const id of this.finished) this.allowed.add(id);
 
     const ws = new WebSocket(env.SPORTSAPI_WS_URL, {
       headers: { 'x-api-key': env.SPORTSAPI_KEY, 'x-sport': 'football' },
@@ -72,21 +81,25 @@ export class SportsFeed {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action, channel }));
     };
     const subscribeMatch = (id: string) => {
-      allowed.add(id);
+      if (this.finished.has(id)) return;
+      this.allowed.add(id);
       send('subscribe', `match:${id}`);
       send('subscribe', `match:${id}:incidents`);
     };
 
     ws.on('open', () => {
-      logger.info({ matches: allowed.size }, 'sports feed connected');
+      logger.info({ matches: this.allowed.size }, 'sports feed connected');
       this.reconnectAttempt = 0;
       send('subscribe', 'live-scores');
-      for (const id of allowed) subscribeMatch(id);
+      for (const id of this.allowed) subscribeMatch(id);
 
       if (this.hasConnectedBefore) {
-        void this.handlers.onReconnected().catch(err =>
-          logger.error({ err }, 'post-reconnect reconciliation failed'),
-        );
+        void this.handlers
+          .onReconnected()
+          .then(finishedIds => {
+            for (const id of finishedIds) this.unsubscribeMatch(id);
+          })
+          .catch(err => logger.error({ err }, 'post-reconnect reconciliation failed'));
       }
       this.hasConnectedBefore = true;
     });
@@ -104,20 +117,21 @@ export class SportsFeed {
         if (!message.type || !['snapshot', 'update'].includes(message.type)) return;
 
         if (message.channel === 'live-scores') {
-          await this.handlers.onLiveScores(message.data, allowed, subscribeMatch);
+          await this.handlers.onLiveScores(message.data, this.allowed, subscribeMatch);
           return;
         }
 
         const matchId = /^match:(\d+)/.exec(message.channel ?? '')?.[1];
-        if (!matchId || !allowed.has(matchId)) return; // critical EPL allow-list
+        if (!matchId || !this.allowed.has(matchId) || this.finished.has(matchId)) return;
 
-        await this.handlers.onMatchMessage({
+        const result = await this.handlers.onMatchMessage({
           matchId,
           kind: message.type as 'snapshot' | 'update',
           channel: message.channel!,
           payload: message.data,
           receivedAt: new Date(message.timestamp ?? Date.now()).toISOString(),
         });
+        if (result.fullTime) this.unsubscribeMatch(matchId);
       })().catch(err => logger.error({ err }, 'feed message handling failed'));
     });
 
@@ -133,12 +147,17 @@ export class SportsFeed {
     });
   }
 
-  /** Unsubscribes a finished match's channels (called on full time). */
+  /** Drops a finished match's channels. Keeps the id allow-listed so live-scores cannot resubscribe it. */
   unsubscribeMatch(matchId: string): void {
+    this.allowed.add(matchId);
+    if (this.finished.has(matchId)) return;
+    this.finished.add(matchId);
     const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ action: 'unsubscribe', channel: `match:${matchId}` }));
-    ws.send(JSON.stringify({ action: 'unsubscribe', channel: `match:${matchId}:incidents` }));
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: 'unsubscribe', channel: `match:${matchId}` }));
+      ws.send(JSON.stringify({ action: 'unsubscribe', channel: `match:${matchId}:incidents` }));
+    }
+    logger.info({ matchId }, 'unsubscribed finished match channels');
   }
 
   stop(): void {

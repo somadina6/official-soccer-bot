@@ -223,20 +223,26 @@ export type IngestInput = {
   receivedAt: string;
 };
 
+export type IngestResult = {
+  /** True when this payload included full-time, or the fixture is already finished. */
+  fullTime: boolean;
+};
+
 /**
  * Entry point for both WebSocket messages and REST reconciliation payloads.
  * Snapshots pass through the same idempotent diff, so a resent snapshot never
  * creates a duplicate job.
  */
-export async function ingestAndDiff(input: IngestInput): Promise<void> {
+export async function ingestAndDiff(input: IngestInput): Promise<IngestResult> {
   logger.info({ matchId: input.matchId }, 'ingestAndDiff started');
-  
+
   const fixture = await loadFixture(input.matchId);
   if (!fixture) {
     logger.warn({ matchId: input.matchId }, 'message for unknown fixture ignored');
-    return;
+    return { fullTime: false };
   }
   const context = buildContext(input.matchId, fixture);
+  let fullTime = fixture.status === 'finished';
 
   const rawIncidents = extractIncidents(input.payload);
   // Some channels send a single incident object rather than a list.
@@ -248,19 +254,21 @@ export async function ingestAndDiff(input: IngestInput): Promise<void> {
     await ingestEvent(event, fixture, raw);
 
     if (event.type === 'FULL_TIME') {
+      fullTime = true;
       await getSupabase()
         .from('fixtures')
         .update({ status: 'finished', updated_at: new Date().toISOString() })
         .eq('id', fixture.id);
     }
   }
+  return { fullTime };
 }
 
 /** REST reconciliation for one match: used after reconnects, suspicious score
  * changes and the final whistle so no event is missed. */
-export async function reconcileMatchFromRest(matchId: string): Promise<void> {
+export async function reconcileMatchFromRest(matchId: string): Promise<IngestResult> {
   const payload = await fetchMatchIncidents(matchId);
-  await ingestAndDiff({
+  return ingestAndDiff({
     matchId,
     kind: 'snapshot',
     payload,
@@ -268,18 +276,24 @@ export async function reconcileMatchFromRest(matchId: string): Promise<void> {
   });
 }
 
-/** Reconciles every fixture currently marked live. */
-export async function reconcileAllLiveMatches(): Promise<void> {
+/** Reconciles every fixture currently marked live. Returns match IDs that are now full-time. */
+export async function reconcileAllLiveMatches(): Promise<string[]> {
   const { data, error } = await getSupabase()
     .from('fixtures')
     .select('provider_match_id')
     .eq('status', 'live');
   if (error) throw new Error(`live fixture query failed: ${error.message}`);
+  const finished: string[] = [];
   for (const row of data ?? []) {
-    await reconcileMatchFromRest(String(row.provider_match_id)).catch(err =>
-      logger.error({ err, matchId: row.provider_match_id }, 'match reconciliation failed'),
-    );
+    const matchId = String(row.provider_match_id);
+    try {
+      const result = await reconcileMatchFromRest(matchId);
+      if (result.fullTime) finished.push(matchId);
+    } catch (err) {
+      logger.error({ err, matchId }, 'match reconciliation failed');
+    }
   }
+  return finished;
 }
 
 const LiveScoresEntrySchema = z.object({ id: z.union([z.string(), z.number()]) }).passthrough();
