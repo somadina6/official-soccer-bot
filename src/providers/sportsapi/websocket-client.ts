@@ -3,6 +3,8 @@ import { loadEnv } from '../../config/env.js';
 import { logger } from '../../observability/logger.js';
 import { getSupabase } from '../../supabase/client.js';
 
+const ALLOW_LIST_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
+
 export type FeedMessage = {
   matchId: string;
   kind: 'snapshot' | 'update';
@@ -20,16 +22,6 @@ export type FeedHandlers = {
    * `match:{id}:incidents`.
    */
   onMatchMessage: (message: FeedMessage) => Promise<{ fullTime: boolean }>;
-  /**
-   * Called with `live-scores` data so an unexpected/rescheduled live match can
-   * be verified via REST, upserted, and then subscribed. Never publish
-   * directly from live-scores.
-   */
-  onLiveScores: (
-    payload: unknown,
-    allowed: Set<string>,
-    subscribe: (matchId: string) => void,
-  ) => Promise<void>;
   /**
    * Runs REST reconciliation from the last persisted revision after reconnects.
    * Return any match IDs that are now full-time so their channels are dropped.
@@ -57,12 +49,14 @@ export async function activeMatchIds(): Promise<Set<string>> {
 export class SportsFeed {
   private ws: WebSocket | undefined;
   private allowed = new Set<string>();
-  /** Process-lifetime set so live-scores cannot resubscribe a finished match. */
+  /** Process-lifetime set so a later DB refresh cannot resubscribe a finished match. */
   private finished = new Set<string>();
   private reconnectAttempt = 0;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
+  private allowListRefresh: ReturnType<typeof setInterval> | undefined;
   private stopped = false;
   private hasConnectedBefore = false;
+  private refreshing = false;
 
   constructor(private readonly handlers: FeedHandlers) {}
 
@@ -78,21 +72,10 @@ export class SportsFeed {
     });
     this.ws = ws;
 
-    const send = (action: 'subscribe' | 'unsubscribe' | 'ping', channel: string) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action, channel }));
-    };
-    const subscribeMatch = (id: string) => {
-      if (this.finished.has(id)) return;
-      this.allowed.add(id);
-      send('subscribe', `match:${id}`);
-      send('subscribe', `match:${id}:incidents`);
-    };
-
     ws.on('open', () => {
       logger.info({ matches: this.allowed.size }, 'sports feed connected');
       this.reconnectAttempt = 0;
-      send('subscribe', 'live-scores');
-      for (const id of this.allowed) subscribeMatch(id);
+      for (const id of this.allowed) this.subscribeMatch(id);
 
       if (this.hasConnectedBefore) {
         void this.handlers
@@ -105,7 +88,10 @@ export class SportsFeed {
       this.hasConnectedBefore = true;
     });
 
-    this.heartbeat = setInterval(() => send('ping', 'live-scores'), 30_000);
+    this.heartbeat = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) ws.ping();
+    }, 30_000);
+    this.startAllowListRefresh();
 
     ws.on('message', bytes => {
       void (async () => {
@@ -116,11 +102,6 @@ export class SportsFeed {
           return;
         }
         if (!message.type || !['snapshot', 'update'].includes(message.type)) return;
-
-        if (message.channel === 'live-scores') {
-          await this.handlers.onLiveScores(message.data, this.allowed, subscribeMatch);
-          return;
-        }
 
         const matchId = /^match:(\d+)/.exec(message.channel ?? '')?.[1];
         if (!matchId || !this.allowed.has(matchId) || this.finished.has(matchId)) return;
@@ -148,7 +129,30 @@ export class SportsFeed {
     });
   }
 
-  /** Drops a finished match's channels. Keeps the id allow-listed so live-scores cannot resubscribe it. */
+  /**
+   * Reloads active fixtures from Supabase and subscribes to any match that has
+   * entered the kick-off window since connect. No SportsAPI REST calls.
+   */
+  async refreshAllowList(): Promise<void> {
+    if (this.stopped || this.refreshing) return;
+    this.refreshing = true;
+    try {
+      const ids = await activeMatchIds();
+      let added = 0;
+      for (const id of ids) {
+        if (this.finished.has(id) || this.allowed.has(id)) continue;
+        this.subscribeMatch(id);
+        added += 1;
+      }
+      if (added > 0) {
+        logger.info({ added, matches: this.allowed.size }, 'allow-list refreshed');
+      }
+    } finally {
+      this.refreshing = false;
+    }
+  }
+
+  /** Drops a finished match's channels. Keeps the id allow-listed so a later refresh cannot resubscribe it. */
   unsubscribeMatch(matchId: string): void {
     this.allowed.add(matchId);
     if (this.finished.has(matchId)) return;
@@ -164,6 +168,25 @@ export class SportsFeed {
   stop(): void {
     this.stopped = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
+    if (this.allowListRefresh) clearInterval(this.allowListRefresh);
     this.ws?.close();
+  }
+
+  private startAllowListRefresh(): void {
+    if (this.allowListRefresh) return;
+    this.allowListRefresh = setInterval(() => {
+      void this.refreshAllowList().catch(err =>
+        logger.error({ err }, 'allow-list refresh failed'),
+      );
+    }, ALLOW_LIST_REFRESH_MS);
+  }
+
+  private subscribeMatch(id: string): void {
+    if (this.finished.has(id)) return;
+    this.allowed.add(id);
+    const ws = this.ws;
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ action: 'subscribe', channel: `match:${id}` }));
+    ws.send(JSON.stringify({ action: 'subscribe', channel: `match:${id}:incidents` }));
   }
 }

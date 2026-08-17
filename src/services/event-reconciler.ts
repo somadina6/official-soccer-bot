@@ -2,19 +2,15 @@ import { z } from 'zod';
 import type { MatchEvent } from '../domain/match-event.js';
 import { logger } from '../observability/logger.js';
 import {
-  canonicalTournamentId,
   extractIncidents,
-  extractMatchDetails,
   normalizeIncident,
-  teamIdFromUnknown,
   type MatchContext,
 } from '../providers/sportsapi/mapper.js';
-import { fetchMatch, fetchMatchIncidents } from '../providers/sportsapi/rest-client.js';
+import { fetchMatchIncidents } from '../providers/sportsapi/rest-client.js';
 import { getSupabase } from '../supabase/client.js';
 import { QUEUES, sendToQueue } from '../jobs/supabase-queues.js';
 import { evaluateEligibility } from './eligibility.js';
 import { loadRuntimeSettings } from './settings.js';
-import { loadWatchedTeamIds } from './watched-clubs.js';
 
 /** Tolerant reader for the team JSON stored on fixtures. */
 const TeamJsonSchema = z
@@ -294,67 +290,4 @@ export async function reconcileAllLiveMatches(): Promise<string[]> {
     }
   }
   return finished;
-}
-
-const LiveScoresEntrySchema = z.object({ id: z.union([z.string(), z.number()]) }).passthrough();
-
-/**
- * Handles `live-scores` data: detects a live match missing from the
- * allow-list, verifies it is Premier League or involves a watched club,
- * upserts the fixture and subscribes to its channels. Nothing is ever
- * published directly from live-scores.
- */
-export async function discoverUnexpectedLiveFixture(
-  payload: unknown,
-  allowed: Set<string>,
-  subscribe: (matchId: string) => void,
-  premierLeagueTournamentId: number,
-  competitionRowId: number,
-): Promise<void> {
-  const entries = Array.isArray(payload) ? payload : [payload];
-  const watchedTeamIds = await loadWatchedTeamIds();
-  for (const entry of entries) {
-    const parsed = LiveScoresEntrySchema.safeParse(entry);
-    if (!parsed.success) continue;
-    const matchId = String(parsed.data.id);
-    if (allowed.has(matchId)) continue;
-
-    let match: ReturnType<typeof extractMatchDetails>;
-    try {
-      match = extractMatchDetails(await fetchMatch(matchId));
-    } catch {
-      continue;
-    }
-    if (!match) continue;
-    const homeId = teamIdFromUnknown(match.homeTeam);
-    const awayId = teamIdFromUnknown(match.awayTeam);
-    const isPremierLeague = canonicalTournamentId(match) === premierLeagueTournamentId;
-    const isWatchedClub =
-      (homeId !== undefined && watchedTeamIds.has(homeId)) ||
-      (awayId !== undefined && watchedTeamIds.has(awayId));
-    if (!isPremierLeague && !isWatchedClub) continue;
-
-    const { error } = await getSupabase().from('fixtures').upsert(
-      {
-        provider: 'sportsapi-pro',
-        provider_match_id: Number(matchId),
-        competition_id: competitionRowId,
-        starts_at: new Date((match.startTimestamp ?? Date.now() / 1000) * 1000).toISOString(),
-        status: 'live',
-        home_team: match.homeTeam ?? {},
-        away_team: match.awayTeam ?? {},
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'provider,provider_match_id' },
-    );
-    if (error) {
-      logger.error({ matchId, error: error.message }, 'unexpected live fixture upsert failed');
-      continue;
-    }
-    subscribe(matchId);
-    logger.info(
-      { matchId, isPremierLeague, isWatchedClub },
-      'unexpected live fixture discovered and subscribed',
-    );
-  }
 }

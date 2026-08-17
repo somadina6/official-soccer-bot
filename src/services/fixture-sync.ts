@@ -149,26 +149,46 @@ export async function reconcileCurrentlyLive(
 }
 
 const SIX_HOURS = 6 * 60 * 60_000;
+const LIVE_RECONCILE_MS = 30 * 60 * 1000;
 
 /**
- * Periodic fixture synchronization: at startup, every six hours, and the next
- * day shortly after midnight UTC. (The "five minutes before earliest kick-off"
- * sync is approximated by the six-hour cadence plus live reconciliation.)
+ * Periodic fixture synchronization: full date schedules every six hours and
+ * shortly after midnight UTC; `/live/all` every 30 minutes so a postponed or
+ * cup match is picked up without a football-wide WebSocket. `onSynced` lets
+ * the feed subscribe to any newly upserted match ids (no extra REST).
  */
-export function startFixtureSyncSchedule(competition: Competition): () => void {
-  const run = async () => {
-    const today = new Date();
-    const tomorrow = new Date(today.getTime() + 86_400_000);
-    await syncSchedule(today.toISOString().slice(0, 10), competition);
-    await syncSchedule(tomorrow.toISOString().slice(0, 10), competition);
-    await reconcileCurrentlyLive(competition);
+export function startFixtureSyncSchedule(
+  competition: Competition,
+  onSynced?: () => Promise<void> | void,
+): () => void {
+  let inFlight = false;
+
+  const run = async (includeSchedule: boolean, label: string) => {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      if (includeSchedule) {
+        const today = new Date();
+        const tomorrow = new Date(today.getTime() + 86_400_000);
+        await syncSchedule(today.toISOString().slice(0, 10), competition);
+        await syncSchedule(tomorrow.toISOString().slice(0, 10), competition);
+      }
+      await reconcileCurrentlyLive(competition);
+      await onSynced?.();
+    } catch (err) {
+      logger.error({ err }, label);
+    } finally {
+      inFlight = false;
+    }
   };
 
-  const interval = setInterval(() => {
-    void run().catch((err) =>
-      logger.error({ err }, "scheduled fixture sync failed"),
-    );
+  const scheduleInterval = setInterval(() => {
+    void run(true, "scheduled fixture sync failed");
   }, SIX_HOURS);
+
+  const liveInterval = setInterval(() => {
+    void run(false, "scheduled live reconcile failed");
+  }, LIVE_RECONCILE_MS);
 
   // Next-day sync shortly after midnight UTC.
   const now = new Date();
@@ -180,13 +200,12 @@ export function startFixtureSyncSchedule(competition: Competition): () => void {
     5,
   );
   const midnightTimer = setTimeout(() => {
-    void run().catch((err) =>
-      logger.error({ err }, "midnight fixture sync failed"),
-    );
+    void run(true, "midnight fixture sync failed");
   }, nextMidnight - now.getTime());
 
   return () => {
-    clearInterval(interval);
+    clearInterval(scheduleInterval);
+    clearInterval(liveInterval);
     clearTimeout(midnightTimer);
   };
 }

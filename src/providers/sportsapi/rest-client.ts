@@ -133,11 +133,6 @@ export async function fetchLiveMatches(): Promise<unknown> {
   return sportsGet<unknown>('/live/all');
 }
 
-/** Full match payload used to verify tournament membership of a live match. */
-export async function fetchMatch(matchId: string): Promise<unknown> {
-  return sportsGet<unknown>(`/match/${matchId}`);
-}
-
 /** Current incidents for a match; the reconciliation + confirmation source. */
 export async function fetchMatchIncidents(matchId: string): Promise<unknown> {
   return sportsGet<unknown>(`/match/${matchId}/incidents`);

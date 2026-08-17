@@ -11,11 +11,7 @@ import {
   type Competition,
 } from './services/fixture-sync.js';
 import { discoverWatchedClubs } from './services/watched-clubs.js';
-import {
-  discoverUnexpectedLiveFixture,
-  ingestAndDiff,
-  reconcileAllLiveMatches,
-} from './services/event-reconciler.js';
+import { ingestAndDiff, reconcileAllLiveMatches } from './services/event-reconciler.js';
 import { startQueueConsumers } from './jobs/consumers/index.js';
 import { closeQueuePool } from './jobs/supabase-queues.js';
 
@@ -36,6 +32,7 @@ async function trySportsStep(label: string, fn: () => Promise<unknown>): Promise
  *  5–6. Open the WebSocket and subscribe to allow-listed match channels.
  *  7. Snapshots feed the same idempotent diff as updates — never direct tweets.
  *  8. Reconnects reload the allow-list and re-run REST reconciliation.
+ *  9. Allow-list is refreshed from Supabase on a timer and after each fixture sync.
  *
  * Schedule/live/websocket failures are logged, not fatal, so queue consumers
  * still start (seed + commentary + dry-run do not need SportsAPI).
@@ -79,18 +76,10 @@ async function startWorker(): Promise<void> {
           payload: message.payload,
           receivedAt: message.receivedAt,
         }),
-      onLiveScores: (payload, allowed, subscribe) =>
-        discoverUnexpectedLiveFixture(
-          payload,
-          allowed,
-          subscribe,
-          competition.providerId,
-          competition.id,
-        ),
       onReconnected: () => reconcileAllLiveMatches(),
     });
     await trySportsStep('websocket', () => feed!.connect());
-    stopFixtureSync = startFixtureSyncSchedule(competition);
+    stopFixtureSync = startFixtureSyncSchedule(competition, () => feed!.refreshAllowList());
   } else {
     logger.warn('SPORTSAPI_ENABLED=false; skipping schedule, live reconcile, and websocket');
   }
