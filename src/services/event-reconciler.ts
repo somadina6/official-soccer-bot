@@ -229,6 +229,8 @@ export type IngestInput = {
  * creates a duplicate job.
  */
 export async function ingestAndDiff(input: IngestInput): Promise<void> {
+  logger.info({ matchId: input.matchId }, 'ingestAndDiff started');
+  
   const fixture = await loadFixture(input.matchId);
   if (!fixture) {
     logger.warn({ matchId: input.matchId }, 'message for unknown fixture ignored');
