@@ -8,10 +8,17 @@ import { logger } from '../../observability/logger.js';
  */
 async function sportsGet<T>(path: string): Promise<T> {
   const env = loadEnv();
+  const startedAt = Date.now();
+  logger.info({ path }, 'SportsAPI GET');
   const response = await fetch(`${env.SPORTSAPI_BASE_URL}${path}`, {
     headers: { 'x-api-key': env.SPORTSAPI_KEY },
   });
-  if (!response.ok) throw new Error(`SportsAPI ${response.status}: ${path}`);
+  const durationMs = Date.now() - startedAt;
+  if (!response.ok) {
+    logger.info({ path, status: response.status, durationMs }, 'SportsAPI GET failed');
+    throw new Error(`SportsAPI ${response.status}: ${path}`);
+  }
+  logger.info({ path, status: response.status, durationMs }, 'SportsAPI GET completed');
   return response.json() as Promise<T>;
 }
 
