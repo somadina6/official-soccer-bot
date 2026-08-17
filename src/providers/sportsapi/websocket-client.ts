@@ -66,7 +66,7 @@ export class SportsFeed {
     this.allowed = await activeMatchIds();
     for (const id of this.finished) this.allowed.add(id);
 
-    logger.info({ matches: this.allowed.size }, 'SportsAPI WebSocket connecting');
+    logger.info({ matches: this.allowed.size }, 'SportsAPI WebSocket connecting...');
     const ws = new WebSocket(env.SPORTSAPI_WS_URL, {
       headers: { 'x-api-key': env.SPORTSAPI_KEY, 'x-sport': 'football' },
     });
