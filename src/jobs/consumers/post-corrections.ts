@@ -5,7 +5,7 @@ import { composeEventImage, solidFallbackBackground } from '../../services/visua
 import { getSupabase } from '../../supabase/client.js';
 import { QUEUES } from '../supabase-queues.js';
 import { startConsumer } from './runner.js';
-import { loadEvent, setEventState } from './shared.js';
+import { loadEvent, requireMatchEventId, setEventState } from './shared.js';
 
 /** Natural key = idempotency key minus its trailing `:revision` suffix. */
 function naturalKeyOf(idempotencyKey: string): string {
@@ -20,7 +20,8 @@ function naturalKeyOf(idempotencyKey: string): string {
  */
 export function startPostCorrectionsConsumer(): () => void {
   return startConsumer(QUEUES.postCorrections, async msg => {
-    const { matchEventId, idempotencyKey } = msg.message;
+    const matchEventId = requireMatchEventId(msg.message.matchEventId);
+    const { idempotencyKey } = msg.message;
     const row = await loadEvent(matchEventId);
     const naturalKey = naturalKeyOf(row.idempotency_key);
 

@@ -2,6 +2,13 @@ import type { EventState } from '../../domain/match-event.js';
 import { MatchEventSchema, type MatchEvent } from '../../domain/match-event.js';
 import { getSupabase } from '../../supabase/client.js';
 
+export function requireMatchEventId(id: number | undefined): number {
+  if (id === undefined || !Number.isFinite(id)) {
+    throw new Error('queue message missing matchEventId');
+  }
+  return id;
+}
+
 export async function setEventState(matchEventId: number, state: EventState): Promise<void> {
   const { error } = await getSupabase()
     .from('match_events')

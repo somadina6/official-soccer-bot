@@ -13,6 +13,7 @@ import {
 import { discoverWatchedClubs } from './services/watched-clubs.js';
 import { ingestAndDiff, reconcileAllLiveMatches } from './services/event-reconciler.js';
 import { startQueueConsumers } from './jobs/consumers/index.js';
+import { startContentJobDispatcher } from './jobs/content-job-dispatcher.js';
 import { closeQueuePool } from './jobs/supabase-queues.js';
 
 async function trySportsStep(label: string, fn: () => Promise<unknown>): Promise<void> {
@@ -85,12 +86,14 @@ async function startWorker(): Promise<void> {
   }
 
   const stopConsumers = startQueueConsumers();
+  const stopDispatcher = startContentJobDispatcher();
   const stopApi = await startApiServer();
 
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'shutting down');
     feed?.stop();
     stopConsumers();
+    stopDispatcher();
     stopFixtureSync();
     await stopApi();
     await closeQueuePool();

@@ -1,5 +1,5 @@
 import { loadEnv } from '../../config/env.js';
-import type { GeneratedContent } from '../../domain/content.js';
+import type { CommentaryStyle, ContentIntent, GeneratedContent } from '../../domain/content.js';
 import { logger } from '../../observability/logger.js';
 import { fallbackTemplate, generateCommentary } from '../../providers/openai/commentary.js';
 import { extractApprovedIncidentFacts } from '../../providers/sportsapi/mapper.js';
@@ -12,7 +12,7 @@ import { getSupabase } from '../../supabase/client.js';
 import { QUEUES } from '../supabase-queues.js';
 import { maybeEnqueueXPublishing } from './publish-join.js';
 import { startConsumer } from './runner.js';
-import { loadEvent, setEventState } from './shared.js';
+import { loadEvent, requireMatchEventId, setEventState } from './shared.js';
 
 /**
  * Operator-approved rivalry/context lines. Kept deliberately small; the model
@@ -34,13 +34,27 @@ async function recentPostTexts(limit = 20): Promise<string[]> {
   return (data ?? []).map(row => row.post_text as string);
 }
 
+async function loadPersistedStyle(matchEventId: number): Promise<CommentaryStyle | undefined> {
+  const { data } = await getSupabase()
+    .from('content_generations')
+    .select('style')
+    .eq('match_event_id', matchEventId)
+    .not('style', 'is', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (data?.style as CommentaryStyle | undefined) ?? undefined;
+}
+
 async function recordAttempt(
   matchEventId: number,
   attempt: number,
   content: GeneratedContent,
   validationErrors: string[],
   usedFallback: boolean,
+  style: CommentaryStyle,
 ): Promise<number> {
+  const intent: ContentIntent = 'live_reaction';
   const { data, error } = await getSupabase()
     .from('content_generations')
     .insert({
@@ -56,6 +70,8 @@ async function recordAttempt(
       used_fallback_template: usedFallback,
       candidates: content.candidates ?? null,
       rank_debug: content.rankDebug ?? null,
+      intent,
+      style,
     })
     .select('id')
     .single();
@@ -72,7 +88,8 @@ export function startContentGenerationConsumer(): () => void {
   return startConsumer(
     QUEUES.contentGeneration,
     async msg => {
-      const { matchEventId, idempotencyKey } = msg.message;
+      const matchEventId = requireMatchEventId(msg.message.matchEventId);
+      const { idempotencyKey } = msg.message;
       const row = await loadEvent(matchEventId);
       if (!['CONFIRMED', 'GENERATING'].includes(row.state)) {
         logger.debug({ matchEventId, state: row.state }, 'event not awaiting generation; skipping');
@@ -86,8 +103,12 @@ export function startContentGenerationConsumer(): () => void {
         ...APPROVED_CONTEXT,
         ...extractApprovedIncidentFacts(row.rawPayload),
       ];
+      const intent: ContentIntent = 'live_reaction';
       const situation = classifySituation(row.event, contextDictionary);
-      const style = sampleCommentaryStyle(situation, settings.banterTone);
+      const style =
+        (await loadPersistedStyle(matchEventId)) ??
+        sampleCommentaryStyle(situation, settings.banterTone);
+      logger.debug({ matchEventId, intent, situation, style }, 'live reaction generation');
 
       let approved: { content: GeneratedContent; generationId: number } | undefined;
 
@@ -110,7 +131,7 @@ export function startContentGenerationConsumer(): () => void {
             situation,
           );
           if (winner) {
-            const generationId = await recordAttempt(matchEventId, attempt, winner, [], false);
+            const generationId = await recordAttempt(matchEventId, attempt, winner, [], false, style);
             approved = { content: winner, generationId };
           } else {
             const failed: GeneratedContent = {
@@ -127,7 +148,7 @@ export function startContentGenerationConsumer(): () => void {
               })),
             };
             const errors = ranked.flatMap(entry => entry.errors);
-            await recordAttempt(matchEventId, attempt, failed, errors, false);
+            await recordAttempt(matchEventId, attempt, failed, errors, false, style);
             logger.warn({ matchEventId, attempt, errors }, 'generated content rejected');
           }
         } catch (error) {
@@ -149,6 +170,7 @@ export function startContentGenerationConsumer(): () => void {
           fallback,
           result.valid ? [] : result.errors,
           true,
+          style,
         );
         if (!result.valid) {
           await setEventState(matchEventId, 'MANUAL_REVIEW');

@@ -1,4 +1,12 @@
 import { z } from "zod";
+import type { MatchEvent } from "./match-event.js";
+import type {
+  CompletedMatch,
+  MatchSummary,
+  StoredPrediction,
+  UpcomingFixture,
+  VerifiedResult,
+} from "./influencer.js";
 
 export const COMMENTARY_STYLES = [
   "punchy",
@@ -52,8 +60,87 @@ export type GeneratedContent = z.infer<typeof GeneratedContentSchema> & {
 
 export type BanterTone = "neutral" | "playful" | "spicy";
 
+export const CONTENT_INTENTS = [
+  "live_reaction",
+  "post_match_verdict",
+  "hot_take",
+  "prediction",
+  "question",
+  "receipt",
+] as const;
+export type ContentIntent = (typeof CONTENT_INTENTS)[number];
+
+export const InfluencerCandidateSchema = z.object({
+  hook: z.string(),
+  factLine: z.string(),
+  opinion: z.string(),
+  punchline: z.string(),
+});
+export type InfluencerCandidate = z.infer<typeof InfluencerCandidateSchema>;
+
+export const InfluencerPostOutputSchema = z.object({
+  candidates: z.array(InfluencerCandidateSchema).length(2),
+  referencedFacts: z.array(z.string()),
+  opinionClaims: z.array(z.string()),
+  risk: z.enum(["low", "review", "reject"]),
+});
+export type InfluencerPostOutput = z.infer<typeof InfluencerPostOutputSchema>;
+
+export type SharedContentInput = {
+  tone: BanterTone;
+  style: CommentaryStyle;
+  approvedFacts: string[];
+  recentOpenings: string[];
+};
+
+export type ContentGenerationInput =
+  | (SharedContentInput & {
+      intent: "live_reaction";
+      event: MatchEvent;
+      situation: CommentarySituation;
+    })
+  | (SharedContentInput & {
+      intent: "post_match_verdict";
+      match: CompletedMatch;
+    })
+  | (SharedContentInput & {
+      intent: "hot_take";
+      subject: {
+        player?: string;
+        team?: string;
+      };
+    })
+  | (SharedContentInput & {
+      intent: "prediction";
+      fixture: UpcomingFixture;
+    })
+  | (SharedContentInput & {
+      intent: "question";
+      match: MatchSummary;
+    })
+  | (SharedContentInput & {
+      intent: "receipt";
+      prediction: StoredPrediction;
+      result: VerifiedResult;
+    });
+
+export type GeneratedInfluencerContent = {
+  postText: string;
+  referencedFacts: string[];
+  opinionClaims: string[];
+  risk: "low" | "review" | "reject";
+  candidates?: InfluencerCandidate[];
+  rankDebug?: unknown;
+};
+
 export function composePostText(candidate: CommentaryCandidate): string {
   return `${candidate.hook}\n\n${candidate.factLine}\n\n${candidate.punchline}`;
+}
+
+export function composeInfluencerPostText(candidate: InfluencerCandidate): string {
+  return [candidate.hook, candidate.factLine, candidate.opinion, candidate.punchline]
+    .filter((line) => line.trim().length > 0)
+    .join("\n\n");
 }
 
 export function extractHook(postText: string): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sampleCommentaryStyle, styleWeights } from './commentary-style.js';
+import { sampleCommentaryStyle, sampleInfluencerStyle, styleWeights } from './commentary-style.js';
 
 describe('styleWeights', () => {
   it('uses the playful mix at full time including timeline', () => {
@@ -63,5 +63,24 @@ describe('sampleCommentaryStyle', () => {
 
   it('can sample question at full time', () => {
     expect(sampleCommentaryStyle('full_time', 'playful', () => 0.99)).toBe('question');
+  });
+});
+
+describe('sampleInfluencerStyle', () => {
+  it('can sample question for a post-match verdict', () => {
+    expect(sampleInfluencerStyle('post_match_verdict', 'playful', () => 0.99)).toBe('question');
+  });
+
+  it('never samples question for a prediction', () => {
+    for (let i = 0; i < 100; i++) {
+      expect(sampleInfluencerStyle('prediction', 'spicy', () => i / 100)).not.toBe('question');
+    }
+  });
+
+  it('reuses a persisted style instead of resampling', () => {
+    const persisted = 'timeline' as const;
+    const sampled = sampleInfluencerStyle('prediction', 'neutral', () => 0);
+    expect(persisted ?? sampled).toBe('timeline');
+    expect(sampled).not.toBe('timeline');
   });
 });

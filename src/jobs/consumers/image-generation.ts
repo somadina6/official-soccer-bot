@@ -2,7 +2,7 @@ import { prepareEventImage } from '../../image-flow/image-pipeline.js';
 import { QUEUES } from '../supabase-queues.js';
 import { maybeEnqueueXPublishing } from './publish-join.js';
 import { startConsumer } from './runner.js';
-import { loadEvent } from './shared.js';
+import { loadEvent, requireMatchEventId } from './shared.js';
 import { logger } from '../../observability/logger.js';
 
 /**
@@ -15,10 +15,8 @@ export function startImageGenerationConsumer(): () => void {
     QUEUES.imageGeneration,
     async msg => {
       logger.debug({ msg }, 'image generation: starting');
-      const { matchEventId, idempotencyKey } = msg.message;
-      if (!Number.isFinite(matchEventId) || matchEventId <= 0) {
-        throw new Error('image job missing matchEventId');
-      }
+      const matchEventId = requireMatchEventId(msg.message.matchEventId);
+      const { idempotencyKey } = msg.message;
       const row = await loadEvent(matchEventId);
       await prepareEventImage({
         matchEventId,

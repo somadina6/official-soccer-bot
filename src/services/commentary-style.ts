@@ -2,6 +2,7 @@ import type {
   BanterTone,
   CommentarySituation,
   CommentaryStyle,
+  ContentIntent,
 } from "../domain/content.js";
 
 export type StyleWeight = { style: CommentaryStyle; weight: number };
@@ -101,6 +102,20 @@ export function sampleCommentaryStyle(
   }
 
   return weights[weights.length - 1]!.style;
+}
+
+const FULL_TIME_INTENTS: Exclude<ContentIntent, "live_reaction">[] = [
+  "post_match_verdict",
+  "question",
+];
+
+export function sampleInfluencerStyle(
+  intent: Exclude<ContentIntent, "live_reaction">,
+  tone: BanterTone,
+  random: () => number = Math.random,
+): CommentaryStyle {
+  const situation = FULL_TIME_INTENTS.includes(intent) ? "full_time" : "goal";
+  return sampleCommentaryStyle(situation, tone, random);
 }
 
 export const STYLE_GUIDANCE: Record<CommentaryStyle, string> = {

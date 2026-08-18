@@ -15,15 +15,17 @@ export const QUEUES = {
   imageGeneration: 'image-generation',
   xPublishing: 'x-publishing',
   postCorrections: 'post-corrections',
+  influencerContent: 'influencer-content',
   deadLetter: 'dead-letter',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
-/** Every queue message carries the event's idempotency key (section 5). */
+/** Every queue message carries an idempotency key (section 5). */
 export type QueueMessage = {
   idempotencyKey: string;
-  matchEventId: number;
+  matchEventId?: number;
+  contentJobId?: string;
   attempt?: number;
   [extra: string]: unknown;
 };

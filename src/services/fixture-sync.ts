@@ -11,6 +11,7 @@ import {
   shouldWatchMatch,
 } from "../providers/sportsapi/mapper.js";
 import { getSupabase } from "../supabase/client.js";
+import { scheduleMatchContent } from "./content-jobs.js";
 import { loadWatchedTeamIds } from "./watched-clubs.js";
 
 export type Competition = {
@@ -106,6 +107,8 @@ export async function syncSchedule(
     );
   if (error) throw new Error(`fixture upsert failed: ${error.message}`);
 
+  await scheduleFixturesByProviderIds(watched.map((m) => m.id));
+
   logger.info(
     { date, fixtures: watched.length, watchedClubs: watchedTeamIds.size },
     "schedule synced",
@@ -144,8 +147,27 @@ export async function reconcileCurrentlyLive(
     );
   if (error) throw new Error(`live fixture upsert failed: ${error.message}`);
 
+  await scheduleFixturesByProviderIds(live.map((m) => m.id));
+
   logger.info({ live: live.length }, "live reconciliation complete");
   return live.length;
+}
+
+async function scheduleFixturesByProviderIds(providerMatchIds: number[]): Promise<void> {
+  if (providerMatchIds.length === 0) return;
+  const { data, error } = await getSupabase()
+    .from("fixtures")
+    .select("id, starts_at, status")
+    .eq("provider", "sportsapi-pro")
+    .in("provider_match_id", providerMatchIds);
+  if (error) throw new Error(`fixture schedule lookup failed: ${error.message}`);
+  for (const fixture of data ?? []) {
+    await scheduleMatchContent({
+      id: fixture.id,
+      starts_at: fixture.starts_at,
+      status: fixture.status,
+    });
+  }
 }
 
 const SIX_HOURS = 6 * 60 * 60_000;

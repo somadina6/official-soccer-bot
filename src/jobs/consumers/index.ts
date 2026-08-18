@@ -1,6 +1,7 @@
 import { startEventConfirmationConsumer } from './event-confirmation.js';
 import { startContentGenerationConsumer } from './content-generation.js';
 import { startImageGenerationConsumer } from './image-generation.js';
+import { startInfluencerContentConsumer } from './influencer-content.js';
 import { startXPublishingConsumer } from './x-publishing.js';
 import { startPostCorrectionsConsumer } from './post-corrections.js';
 
@@ -10,6 +11,7 @@ export function startQueueConsumers(): () => void {
     startEventConfirmationConsumer(),
     startContentGenerationConsumer(),
     startImageGenerationConsumer(),
+    startInfluencerContentConsumer(),
     startXPublishingConsumer(),
     startPostCorrectionsConsumer(),
   ];

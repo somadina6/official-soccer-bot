@@ -2,7 +2,7 @@ import { logger } from '../../observability/logger.js';
 import { confirmEvent } from '../../services/confirmation.js';
 import { QUEUES, sendToQueue } from '../supabase-queues.js';
 import { startConsumer } from './runner.js';
-import { loadEvent, setEventState } from './shared.js';
+import { loadEvent, requireMatchEventId, setEventState } from './shared.js';
 
 /**
  * Consumes `event-confirmation`: after the delay window, re-verifies the
@@ -11,7 +11,8 @@ import { loadEvent, setEventState } from './shared.js';
  */
 export function startEventConfirmationConsumer(): () => void {
   return startConsumer(QUEUES.eventConfirmation, async msg => {
-    const { matchEventId, idempotencyKey } = msg.message;
+    const matchEventId = requireMatchEventId(msg.message.matchEventId);
+    const { idempotencyKey } = msg.message;
     const row = await loadEvent(matchEventId);
     if (row.state !== 'PENDING_CONFIRMATION') {
       logger.debug({ matchEventId, state: row.state }, 'event no longer pending; skipping');

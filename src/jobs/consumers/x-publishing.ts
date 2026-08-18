@@ -6,7 +6,7 @@ import { getSupabase } from '../../supabase/client.js';
 import { downloadArtwork } from '../../supabase/storage.js';
 import { QUEUES } from '../supabase-queues.js';
 import { startConsumer } from './runner.js';
-import { loadEvent, setEventState } from './shared.js';
+import { loadEvent, requireMatchEventId, setEventState } from './shared.js';
 
 async function loadGeneration(contentGenerationId: number) {
   const { data, error } = await getSupabase()
@@ -29,7 +29,8 @@ export function startXPublishingConsumer(): () => void {
   return startConsumer(
     QUEUES.xPublishing,
     async msg => {
-      const { matchEventId, idempotencyKey } = msg.message;
+      const matchEventId = requireMatchEventId(msg.message.matchEventId);
+      const { idempotencyKey } = msg.message;
       const contentGenerationId = Number(msg.message.contentGenerationId);
       const row = await loadEvent(matchEventId);
       if (row.state === 'PUBLISHED') return;

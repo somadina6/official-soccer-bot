@@ -19,6 +19,7 @@ import {
   SITUATION_GUIDANCE,
 } from "../../services/commentary-situation.js";
 import { STYLE_GUIDANCE } from "../../services/commentary-style.js";
+import { MATCHMOUTH_IDENTITY } from "./identity.js";
 
 let client: OpenAI | undefined;
 
@@ -32,7 +33,7 @@ function getOpenAI(): OpenAI {
   return client;
 }
 
-const TONE_GUIDANCE: Record<BanterTone, string> = {
+export const TONE_GUIDANCE: Record<BanterTone, string> = {
   neutral:
     "High-energy match reaction focused on the quality, pressure and drama of the moment. No teasing, but never dry or clinical.",
 
@@ -61,7 +62,7 @@ const BANNED_CLICHE_PROMPT = [
   "footballing gods / eternal symphony / destiny-chapter metaphors",
 ].join(", ");
 
-function commentaryPolicy(
+export function commentaryPolicy(
   tone: BanterTone,
   style: CommentaryStyle,
   situation: CommentarySituation,
@@ -77,8 +78,9 @@ function commentaryPolicy(
           "- Candidate two: quick football wit.",
         ];
   return [
-    "You write immediate Premier League reactions for X as a lively, informed and quick-witted football fan.",
-    "The account is club-neutral, but it is not emotionally neutral.",
+    MATCHMOUTH_IDENTITY,
+    "",
+    "You write immediate Premier League reactions for X.",
     "Make brilliant, shocking or decisive football feel brilliant, shocking or decisive.",
     "",
     "PRIMARY OBJECTIVE:",
@@ -108,7 +110,7 @@ function commentaryPolicy(
     "- Each candidate must have a genuinely different hook.",
     "- Never reuse a recent opening supplied by the user.",
     "",
-    `Tone target: ${tone}. ${TONE_GUIDANCE[tone]}`,
+    `Target tone: ${tone}. ${TONE_GUIDANCE[tone]}`,
     `Assigned style for both candidates: ${style}. ${STYLE_GUIDANCE[style]}`,
     `Confirmed situation: ${situation}. ${SITUATION_GUIDANCE[situation]}`,
     "",

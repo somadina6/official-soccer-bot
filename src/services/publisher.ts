@@ -9,6 +9,7 @@ import {
 import { createPost } from "../providers/x/posts.js";
 import { getSupabase } from "../supabase/client.js";
 import { loadRuntimeSettings } from "./settings.js";
+import type { ContentIntent } from "../domain/content.js";
 
 /**
  * Application-level circuit breaker (section 9):
@@ -29,12 +30,14 @@ async function countPostsSince(since: Date): Promise<number> {
 }
 
 export type PublishInput = {
-  matchEventId: number;
+  matchEventId?: number;
+  contentJobId?: string;
+  intent?: ContentIntent;
   idempotencyKey: string;
   postText: string;
-  altText: string;
-  image: Buffer;
-  imageHash: string;
+  altText?: string;
+  image?: Buffer;
+  imageHash?: string;
   isCorrection?: boolean;
   inReplyToPostId?: string;
 };
@@ -88,58 +91,62 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
 
   const correlationId = randomUUID();
   try {
-    // Reuse an unexpired X media ID after a retry: never re-upload the same
-    // image and never regenerate it. An expired ID is re-uploaded from the
-    // stored JPEG bytes passed in by the caller.
-    const { data: knownMedia } = await supabase
-      .from("media_assets")
-      .select("id, kind, status, x_media_id, x_media_expires_at")
-      .eq("match_event_id", input.matchEventId)
-      .eq("kind", "generated_event")
-      .maybeSingle();
+    let mediaId: string | undefined;
 
-    const reusable =
-      knownMedia?.x_media_id && !isXMediaExpired(knownMedia.x_media_expires_at)
-        ? knownMedia.x_media_id
-        : undefined;
+    if (input.image && input.matchEventId !== undefined) {
+      // Reuse an unexpired X media ID after a retry: never re-upload the same
+      // image and never regenerate it. An expired ID is re-uploaded from the
+      // stored JPEG bytes passed in by the caller.
+      const { data: knownMedia } = await supabase
+        .from("media_assets")
+        .select("id, kind, status, x_media_id, x_media_expires_at")
+        .eq("match_event_id", input.matchEventId)
+        .eq("kind", "generated_event")
+        .maybeSingle();
 
-    let mediaId = reusable;
-    if (!mediaId) {
-      const uploaded = await uploadImage(input.image);
-      mediaId = uploaded.mediaId;
-      // Alt-text failure is a hard error: do not publish inaccessible media.
-      await setMediaAltText(mediaId, input.altText);
-      if (knownMedia) {
-        await supabase
-          .from("media_assets")
-          .update({
+      const reusable =
+        knownMedia?.x_media_id && !isXMediaExpired(knownMedia.x_media_expires_at)
+          ? knownMedia.x_media_id
+          : undefined;
+
+      mediaId = reusable;
+      if (!mediaId) {
+        const uploaded = await uploadImage(input.image);
+        mediaId = uploaded.mediaId;
+        // Alt-text failure is a hard error: do not publish inaccessible media.
+        await setMediaAltText(mediaId, input.altText ?? "");
+        if (knownMedia) {
+          await supabase
+            .from("media_assets")
+            .update({
+              x_media_id: mediaId,
+              x_media_expires_at: uploaded.expiresAt.toISOString(),
+              status:
+                knownMedia.status === "fallback_used"
+                  ? "fallback_used"
+                  : "uploaded_to_x",
+              alt_text: input.altText ?? "",
+              image_hash: input.imageHash,
+            })
+            .eq("id", knownMedia.id);
+        } else {
+          await supabase.from("media_assets").insert({
+            match_event_id: input.matchEventId,
+            kind: "final_composite",
+            status: "uploaded_to_x",
+            image_hash: input.imageHash,
             x_media_id: mediaId,
             x_media_expires_at: uploaded.expiresAt.toISOString(),
-            status:
-              knownMedia.status === "fallback_used"
-                ? "fallback_used"
-                : "uploaded_to_x",
-            alt_text: input.altText,
-            image_hash: input.imageHash,
-          })
-          .eq("id", knownMedia.id);
-      } else {
-        await supabase.from("media_assets").insert({
-          match_event_id: input.matchEventId,
-          kind: "final_composite",
-          status: "uploaded_to_x",
-          image_hash: input.imageHash,
-          x_media_id: mediaId,
-          x_media_expires_at: uploaded.expiresAt.toISOString(),
-          alt_text: input.altText,
-        });
+            alt_text: input.altText ?? "",
+          });
+        }
       }
     }
 
     const postInput: Parameters<typeof createPost>[0] = {
       text: input.postText,
-      mediaId,
     };
+    if (mediaId) postInput.mediaId = mediaId;
     if (input.inReplyToPostId)
       postInput.inReplyToPostId = input.inReplyToPostId;
     const xPostId = await createPost(postInput);
@@ -148,11 +155,13 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     const { error: recordError } = await supabase
       .from("published_posts")
       .insert({
-        match_event_id: input.matchEventId,
+        match_event_id: input.matchEventId ?? null,
+        content_job_id: input.contentJobId ?? null,
+        intent: input.intent ?? (input.matchEventId ? "live_reaction" : null),
         idempotency_key: input.idempotencyKey,
         x_post_id: xPostId,
         post_text: input.postText,
-        x_media_id: mediaId,
+        x_media_id: mediaId ?? null,
         correlation_id: correlationId,
         in_reply_to_post_id: input.inReplyToPostId ?? null,
         is_correction: input.isCorrection ?? false,
