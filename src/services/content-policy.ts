@@ -13,7 +13,7 @@ import { classifySituation, requiresPlayerName } from './commentary-situation.js
  * before publishing. Returns the full list of violations for audit.
  */
 
-export const MAX_POST_LENGTH = 240;
+export const MAX_POST_LENGTH = 280;
 
 const URL_PATTERN = /https?:\/\/|www\./i;
 const HASHTAG_PATTERN = /#[A-Za-z0-9_]/;

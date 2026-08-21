@@ -30,7 +30,7 @@ describe('validateContent', () => {
     expect(validateContent(validContent, goalEvent, [])).toEqual({ valid: true });
   });
 
-  it('rejects text over 240 characters', () => {
+  it('rejects text over 280 characters', () => {
     const result = validateContent(
       { ...validContent, postText: validContent.postText + ' x'.repeat(120) },
       goalEvent,

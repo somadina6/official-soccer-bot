@@ -445,7 +445,7 @@ The model should receive:
 
 Require structured output matching `GeneratedContent`. Then validate in code:
 
-- Maximum target length: 240 characters.
+- Maximum target length: 280 characters.
 - Player, team, minute and score must exactly match the event.
 - No URLs unless deliberately enabled; X charges more for posts with URLs.
 - No unsupported superlatives such as “first ever” or “record-breaking.”

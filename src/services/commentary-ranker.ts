@@ -37,7 +37,7 @@ export type RankResult = {
 function lengthScore(chars: number): number {
   if (chars >= TARGET_MIN && chars <= TARGET_MAX) return 1;
   if (chars < TARGET_MIN) return Math.max(0, chars / TARGET_MIN);
-  if (chars <= 240) return Math.max(0, 1 - (chars - TARGET_MAX) / (240 - TARGET_MAX));
+  if (chars <= 280) return Math.max(0, 1 - (chars - TARGET_MAX) / (280 - TARGET_MAX));
   return 0;
 }
 

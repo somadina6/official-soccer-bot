@@ -98,7 +98,7 @@ export function commentaryPolicy(
     "  factLine — the confirmed player/team, minute and score, written in active language.",
     "  punchline — one sharp, incident-specific observation, reaction or piece of banter.",
     "- The published post is those three lines joined with newline characters.",
-    "- Target 150–220 characters per candidate. Absolute maximum: 240.",
+    "- Target 150–220 characters per candidate. Absolute maximum: 280.",
     ...candidateGuidance,
     "- Both must follow the assigned style, but approach the event from different angles.",
     "",
