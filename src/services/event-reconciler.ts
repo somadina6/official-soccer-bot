@@ -275,6 +275,7 @@ export async function ingestAndDiff(input: IngestInput): Promise<IngestResult> {
   const context = buildContext(input.matchId, fixture);
   let fullTime = fixture.status === "finished";
 
+  logger.info({ payload: input.payload }, "payload");
   const rawIncidents = extractIncidents(input.payload);
   // Some channels send a single incident object rather than a list.
   const candidates = rawIncidents.length > 0 ? rawIncidents : [input.payload];
