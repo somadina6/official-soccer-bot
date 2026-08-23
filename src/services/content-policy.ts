@@ -98,6 +98,13 @@ function isAllCapsLine(line: string): boolean {
 export type ContentValidationOptions = {
   style?: CommentaryStyle;
   situation?: CommentarySituation;
+  /**
+   * True when the candidate is a raw one-line reaction with no factLine
+   * (e.g. "CHELSEA WHY"). Skips the mandatory player-name/minute/score
+   * callouts, which only make sense once a candidate chose to state facts.
+   * Numbers are still checked against the event regardless.
+   */
+  raw?: boolean;
 };
 
 export type ValidationResult = { valid: true } | { valid: false; errors: string[] };
@@ -152,15 +159,17 @@ export function validateContent(
     if (new RegExp(`\\b${word}\\b`, 'i').test(text)) errors.push(`banned cliché: "${word}"`);
   }
 
-  if (event.player && requiresPlayerName(situation) && !lower.includes(event.player.name.toLowerCase())) {
-    errors.push(`post must name the player "${event.player.name}"`);
-  }
-  if (event.type !== 'FULL_TIME' && !text.includes(String(event.minute))) {
-    errors.push(`post must contain the minute ${event.minute}`);
-  }
-  const scorePattern = new RegExp(`${event.home.score}\\s*[–—:-]\\s*${event.away.score}`);
-  if (!scorePattern.test(text)) {
-    errors.push(`post must contain the score ${event.home.score}-${event.away.score}`);
+  if (!options.raw) {
+    if (event.player && requiresPlayerName(situation) && !lower.includes(event.player.name.toLowerCase())) {
+      errors.push(`post must name the player "${event.player.name}"`);
+    }
+    if (event.type !== 'FULL_TIME' && !text.includes(String(event.minute))) {
+      errors.push(`post must contain the minute ${event.minute}`);
+    }
+    const scorePattern = new RegExp(`${event.home.score}\\s*[–—:-]\\s*${event.away.score}`);
+    if (!scorePattern.test(text)) {
+      errors.push(`post must contain the score ${event.home.score}-${event.away.score}`);
+    }
   }
   const digits = text.match(/\d+/g) ?? [];
   const allowedNumbers = new Set(

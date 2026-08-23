@@ -208,6 +208,33 @@ describe('validateContent', () => {
     );
     expect(result).toEqual({ valid: true });
   });
+
+  it('allows a raw one-line reaction with no minute, score or player name', () => {
+    const result = validateContent(
+      { ...validContent, postText: 'ARSENAL WHY' },
+      goalEvent,
+      [],
+      [],
+      { raw: true },
+    );
+    expect(result).toEqual({ valid: true });
+  });
+
+  it('still rejects an invented number in a raw one-liner', () => {
+    const result = validateContent(
+      { ...validContent, postText: 'That is his 15th of the season.' },
+      goalEvent,
+      [],
+      [],
+      { raw: true },
+    );
+    expect(result.valid).toBe(false);
+  });
+
+  it('still enforces minute, score and player name when raw is not set', () => {
+    const result = validateContent({ ...validContent, postText: 'ARSENAL WHY' }, goalEvent, []);
+    expect(result.valid).toBe(false);
+  });
 });
 
 describe('similarity', () => {

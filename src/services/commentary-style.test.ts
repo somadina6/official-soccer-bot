@@ -4,10 +4,10 @@ import { sampleCommentaryStyle, sampleInfluencerStyle, styleWeights } from './co
 describe('styleWeights', () => {
   it('uses the playful mix at full time including timeline', () => {
     expect(styleWeights('full_time', 'playful')).toEqual([
-      { style: 'punchy', weight: 30 },
-      { style: 'playful', weight: 25 },
-      { style: 'dramatic', weight: 15 },
-      { style: 'timeline', weight: 20 },
+      { style: 'punchy', weight: 20 },
+      { style: 'playful', weight: 20 },
+      { style: 'dramatic', weight: 10 },
+      { style: 'timeline', weight: 40 },
       { style: 'question', weight: 10 },
     ]);
   });
@@ -17,14 +17,16 @@ describe('styleWeights', () => {
     expect(styles).toEqual(['punchy', 'playful', 'dramatic', 'timeline']);
   });
 
-  it('drops playful and timeline for a neutral tone', () => {
+  it('drops playful for a neutral tone but keeps timeline for low-filter reactions', () => {
     expect(styleWeights('goal', 'neutral')).toEqual([
-      { style: 'punchy', weight: 70 },
-      { style: 'dramatic', weight: 30 },
+      { style: 'punchy', weight: 45 },
+      { style: 'dramatic', weight: 20 },
+      { style: 'timeline', weight: 35 },
     ]);
     expect(styleWeights('full_time', 'neutral')).toEqual([
-      { style: 'punchy', weight: 60 },
-      { style: 'dramatic', weight: 25 },
+      { style: 'punchy', weight: 40 },
+      { style: 'dramatic', weight: 15 },
+      { style: 'timeline', weight: 30 },
       { style: 'question', weight: 15 },
     ]);
   });
@@ -53,11 +55,10 @@ describe('sampleCommentaryStyle', () => {
     }
   });
 
-  it('never samples playful or timeline when tone is neutral', () => {
+  it('never samples playful when tone is neutral', () => {
     for (let i = 0; i < 100; i++) {
       const style = sampleCommentaryStyle('full_time', 'neutral', () => i / 100);
       expect(style).not.toBe('playful');
-      expect(style).not.toBe('timeline');
     }
   });
 

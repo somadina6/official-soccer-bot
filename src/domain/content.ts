@@ -133,8 +133,16 @@ export type GeneratedInfluencerContent = {
   rankDebug?: unknown;
 };
 
+/**
+ * factLine and punchline are optional: a raw one-line reaction (just the
+ * hook) is a valid, often preferable, post — real fan accounts rarely pad
+ * every tweet out to three lines.
+ */
 export function composePostText(candidate: CommentaryCandidate): string {
-  return `${candidate.hook}\n\n${candidate.factLine}\n\n${candidate.punchline}`;
+  return [candidate.hook, candidate.factLine, candidate.punchline]
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join("\n\n");
 }
 
 export function composeInfluencerPostText(candidate: InfluencerCandidate): string {

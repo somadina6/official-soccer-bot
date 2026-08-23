@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   InfluencerPostOutputSchema,
   composeInfluencerPostText,
+  composePostText,
 } from './content.js';
 
 describe('InfluencerPostOutputSchema', () => {
@@ -30,6 +31,26 @@ describe('InfluencerPostOutputSchema', () => {
       risk: 'low',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('composePostText', () => {
+  it('joins all three lines when every field is filled', () => {
+    expect(
+      composePostText({ hook: 'HOOK', factLine: 'FACT', punchline: 'PUNCH' }),
+    ).toBe('HOOK\n\nFACT\n\nPUNCH');
+  });
+
+  it('collapses to a single line when factLine and punchline are empty', () => {
+    expect(composePostText({ hook: 'CHELSEA WHY', factLine: '', punchline: '' })).toBe(
+      'CHELSEA WHY',
+    );
+  });
+
+  it('drops only the empty lines, keeping order', () => {
+    expect(composePostText({ hook: 'HOOK', factLine: '', punchline: 'PUNCH' })).toBe(
+      'HOOK\n\nPUNCH',
+    );
   });
 });
 

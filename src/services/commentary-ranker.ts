@@ -10,9 +10,21 @@ import {
 import type { MatchEvent } from '../domain/match-event.js';
 import { countEmojis, maxSimilarity, similarity, validateContent } from './content-policy.js';
 
-const TARGET_MIN = 100;
-const TARGET_MAX = 220;
 const GENERIC_GOAL_HOOK = /^\s*go+a+l!*\s*$/i;
+
+/**
+ * Raw one-line reactions (timeline style, or any style when the model drops
+ * the factLine) read naturally much shorter than a three-line post — a bant
+ * account tweet is often under 40 characters. Scoring them against a
+ * 100–220 target would always lose to a padded three-liner.
+ */
+const LENGTH_TARGETS: Record<CommentaryStyle, [number, number]> = {
+  punchy: [60, 200],
+  playful: [60, 200],
+  dramatic: [80, 220],
+  question: [80, 220],
+  timeline: [15, 160],
+};
 
 export type RankedCandidate = {
   candidate: CommentaryCandidate;
@@ -34,10 +46,11 @@ export type RankResult = {
   ranked: RankedCandidate[];
 };
 
-function lengthScore(chars: number): number {
-  if (chars >= TARGET_MIN && chars <= TARGET_MAX) return 1;
-  if (chars < TARGET_MIN) return Math.max(0, chars / TARGET_MIN);
-  if (chars <= 280) return Math.max(0, 1 - (chars - TARGET_MAX) / (280 - TARGET_MAX));
+function lengthScore(chars: number, style: CommentaryStyle): number {
+  const [min, max] = LENGTH_TARGETS[style];
+  if (chars >= min && chars <= max) return 1;
+  if (chars < min) return Math.max(0, chars / min);
+  if (chars <= 280) return Math.max(0, 1 - (chars - max) / (280 - max));
   return 0;
 }
 
@@ -101,6 +114,7 @@ export function rankCandidates(
     const validation = validateContent(content, event, recentPosts, approvedContext, {
       style,
       situation,
+      raw: !candidate.factLine.trim(),
     });
     const reused = hookReused(candidate.hook, recentPosts);
     const valid = validation.valid && !reused;
@@ -112,7 +126,7 @@ export function rankCandidates(
     const breakdown = {
       originality: 1 - maxSimilarity(postText, recentPosts),
       specificity: specificityScore(postText, approvedContext),
-      length: lengthScore(postText.length),
+      length: lengthScore(postText.length, style),
       safety: safetyScore(content, postText, style),
       freshness: reused || GENERIC_GOAL_HOOK.test(candidate.hook) ? 0 : 1,
     };

@@ -58,6 +58,24 @@ describe('rankCandidates', () => {
     expect(winner?.candidates).toHaveLength(2);
   });
 
+  it('accepts a raw one-line candidate with empty factLine and punchline', () => {
+    const output: CommentaryModelOutput = {
+      ...artwork,
+      candidates: [
+        { hook: 'IN IT GOES.', factLine: '', punchline: '' },
+        {
+          hook: 'NO BACKLIFT. NO WARNING.',
+          factLine: "Saka, 67'. Arsenal 2–1 Chelsea.",
+          punchline: 'Left foot, low left, and the net found out last.',
+        },
+      ],
+    };
+
+    const { ranked } = rankCandidates(output, goalEvent, [], [], 'timeline', 'goal');
+    expect(ranked[0]?.valid).toBe(true);
+    expect(ranked[0]?.postText).toBe('IN IT GOES.');
+  });
+
   it('returns no winner when every candidate fails validation', () => {
     const output: CommentaryModelOutput = {
       ...artwork,

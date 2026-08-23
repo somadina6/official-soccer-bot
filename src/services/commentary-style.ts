@@ -33,34 +33,36 @@ export function styleWeights(
   if (tone === "neutral") {
     if (fullTime) {
       return [
-        { style: "punchy", weight: 60 },
-        { style: "dramatic", weight: 25 },
+        { style: "punchy", weight: 40 },
+        { style: "dramatic", weight: 15 },
+        { style: "timeline", weight: 30 },
         { style: "question", weight: 15 },
       ];
     }
 
     return [
-      { style: "punchy", weight: 70 },
-      { style: "dramatic", weight: 30 },
+      { style: "punchy", weight: 45 },
+      { style: "dramatic", weight: 20 },
+      { style: "timeline", weight: 35 },
     ];
   }
 
   if (tone === "playful") {
     if (fullTime) {
       return [
-        { style: "punchy", weight: 30 },
-        { style: "playful", weight: 25 },
-        { style: "dramatic", weight: 15 },
-        { style: "timeline", weight: 20 },
+        { style: "punchy", weight: 20 },
+        { style: "playful", weight: 20 },
+        { style: "dramatic", weight: 10 },
+        { style: "timeline", weight: 40 },
         { style: "question", weight: 10 },
       ];
     }
 
     return [
-      { style: "punchy", weight: 35 },
-      { style: "playful", weight: 30 },
-      { style: "dramatic", weight: 15 },
-      { style: "timeline", weight: 20 },
+      { style: "punchy", weight: 25 },
+      { style: "playful", weight: 25 },
+      { style: "dramatic", weight: 10 },
+      { style: "timeline", weight: 40 },
     ];
   }
 
@@ -120,7 +122,7 @@ export function sampleInfluencerStyle(
 
 export const STYLE_GUIDANCE: Record<CommentaryStyle, string> = {
   punchy:
-    "Punchy observation: one original, event-specific line. Tight rhythm, no fluff.",
+    "Punchy observation: one original, event-specific line. Tight rhythm, no fluff. Often just the hook, nothing else — brevity beats completeness.",
   playful:
     "Playful banter about defending, finishing, tactics or the match situation. Club-neutral. Never identity, appearance, injury, tragedy or referee allegations.",
   dramatic:
@@ -130,7 +132,11 @@ export const STYLE_GUIDANCE: Record<CommentaryStyle, string> = {
   timeline: [
     "Use energetic Football Twitter language with exaggerated confidence,",
     "rapid emotional reactions and playful agenda-driven framing.",
-    "Write conversationally, as though posting immediately from the timeline.",
+    "Write conversationally, as though posting immediately from the timeline —",
+    "a raw, low-filter gut reaction, not a composed caption.",
+    "Prefer ONE short line. Skip the factLine and punchline unless a second",
+    "beat genuinely adds something; most of these posts should be a single",
+    "blunt sentence or fragment.",
     "Use short declarations, occasional ALL CAPS and at most one expressive emoji.",
     "The joke should confidently overreact to the confirmed incident without",
     "inventing facts, targeting identity or becoming genuinely hostile.",
