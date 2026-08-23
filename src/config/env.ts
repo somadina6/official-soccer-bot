@@ -35,7 +35,7 @@ const EnvSchema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().min(1),
 
   OPENAI_API_KEY: z.string().min(1),
-  OPENAI_TEXT_MODEL: z.string().default("gpt-5.6-luna"),
+  OPENAI_TEXT_MODEL: z.string().default("gpt-5.6-terra"),
   OPENAI_IMAGE_MODEL: z.string().default("gpt-image-2"),
   IMAGE_PROVIDER: z.enum(["openai", "replicate"]).default("openai"),
   REPLICATE_API_TOKEN: z.preprocess(
