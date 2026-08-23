@@ -18,7 +18,7 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v3');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v4');
   });
 
   it('uses the player name and authentic kit branding for a goal', () => {
@@ -57,5 +57,43 @@ describe('prompt builder', () => {
     expect(fullTime).toContain('Manchester City');
     expect(fullTime).toContain('Arsenal');
     expect(fullTime).toContain('sponsor logos');
+  });
+
+  it('describes stoppage-time drama when a stoppage minute is present', () => {
+    const prompt = buildEventImagePrompt({ ...base, minute: 90, stoppageMinute: 4 });
+    expect(prompt).toContain("90+4'");
+    expect(prompt).toContain('stoppage-time finish');
+  });
+
+  it('describes an early or late match moment based on the minute', () => {
+    expect(buildEventImagePrompt({ ...base, minute: 5 })).toContain('early in the match');
+    expect(buildEventImagePrompt({ ...base, minute: 85 })).toContain('late in the match');
+    expect(buildEventImagePrompt({ ...base, minute: 45 })).toContain('hard-fought match');
+  });
+
+  it('credits the assist on a goal when one is known', () => {
+    const prompt = buildEventImagePrompt({ ...base, assist: { name: 'Kevin De Bruyne' } });
+    expect(prompt).toContain('Kevin De Bruyne supplied the assist');
+  });
+
+  it('omits assist wording when no assist is known', () => {
+    const prompt = buildEventImagePrompt(base);
+    expect(prompt).not.toContain('supplied the assist');
+  });
+
+  it('weaves the team colours into the kit description', () => {
+    const prompt = buildEventImagePrompt(base);
+    expect(prompt).toContain('#6CADDF');
+  });
+
+  it('varies the full-time mood with the scoreline margin', () => {
+    const draw = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 1 }, away: { ...base.away, score: 1 } });
+    expect(draw).toContain('ends level');
+
+    const rout = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 4 }, away: { ...base.away, score: 0 } });
+    expect(rout).toContain('dominant scoreline');
+
+    const narrow = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 2 }, away: { ...base.away, score: 1 } });
+    expect(narrow).toContain('narrowly triumphant');
   });
 });

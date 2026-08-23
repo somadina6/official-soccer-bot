@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v3';
+export const IMAGE_PROMPT_VERSION = 'prompt-v4';
 
 const SHARED_CONSTRAINTS = `
 No scoreboard, watermark, duplicate people, distorted limbs or extra fingers.
@@ -31,22 +31,56 @@ function kitSideFor(event: MatchEvent): MatchEvent['home'] {
   return event.type === 'OWN_GOAL' ? (homeFavoured ? event.away : event.home) : homeFavoured ? event.home : event.away;
 }
 
+function coloursLineFor(side: MatchEvent['home']): string {
+  return side.colours.length > 0 ? ` in ${side.colours.join(' and ')}` : '';
+}
+
 function kitLineFor(event: MatchEvent): string {
-  return `Wearing an authentic ${kitSideFor(event).name} match kit with club crest, sponsor logos, and league badges visible.`;
+  const side = kitSideFor(event);
+  return `Wearing an authentic ${side.name} match kit${coloursLineFor(side)} with club crest, sponsor logos, and league badges visible.`;
 }
 
 function bothKitsLine(event: MatchEvent): string {
-  return `Players wearing authentic ${event.home.name} and ${event.away.name} match kits with club crests, sponsor logos, and league badges visible.`;
+  return `Players wearing authentic ${event.home.name} kits${coloursLineFor(event.home)} against ${event.away.name} kits${coloursLineFor(event.away)}, club crests, sponsor logos, and league badges visible.`;
 }
 
 function subjectFor(event: MatchEvent): string {
   return event.player?.name ?? 'a football player';
 }
 
+/** Football-notation minute label, e.g. "78'" or "90+3'". */
+function minuteLabel(event: MatchEvent): string {
+  return event.stoppageMinute ? `${event.minute}+${event.stoppageMinute}'` : `${event.minute}'`;
+}
+
+/**
+ * Narrative colour for when in the match this happened, so otherwise
+ * identical event types don't render as interchangeable moments.
+ */
+function momentLineFor(event: MatchEvent): string {
+  const minute = minuteLabel(event);
+  if (event.stoppageMinute) {
+    return `This happens in the ${minute} minute, deep into a tense stoppage-time finish, the floodlit crowd on its feet.`;
+  }
+  if (event.minute <= 15) {
+    return `This happens early in the match, the ${minute} minute, with the crowd still settling in.`;
+  }
+  if (event.minute >= 80) {
+    return `This happens late in the match, the ${minute} minute, in a frantic, high-stakes finale.`;
+  }
+  return `This happens in the ${minute} minute of a hard-fought match.`;
+}
+
+/** Credits the assist when one is known, used only on goal-scoring events. */
+function assistLineFor(event: MatchEvent): string {
+  return event.assist?.name ? ` Moments earlier, ${event.assist.name} supplied the assist.` : '';
+}
+
 /** Builds the photorealistic editorial prompt for one confirmed event. */
 export function buildEventImagePrompt(event: MatchEvent): string {
   const player = subjectFor(event);
   const kitLine = kitLineFor(event);
+  const momentLine = momentLineFor(event);
 
   switch (event.type) {
     case 'GOAL':
@@ -56,6 +90,8 @@ Photorealistic editorial sports photograph of ${player}
 celebrating immediately after scoring, full-body action pose, sprinting toward
 the corner, authentic athletic movement, balanced natural anatomy, realistic
 hands and face, visible emotion, sweat and fabric detail.
+
+${momentLine}${assistLineFor(event)}
 
 ${kitLine} ${CAMERA_STYLE}
 
@@ -70,6 +106,8 @@ head, walking away from the referee, authentic athletic posture, balanced
 natural anatomy, realistic hands and face, raw emotion, sweat and fabric
 detail. The referee is out of frame.
 
+${momentLine}
+
 ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
@@ -83,6 +121,8 @@ face, body turning away from the goal, authentic athletic movement, balanced
 natural anatomy, realistic hands and face, visible despair, sweat and fabric
 detail.
 
+${momentLine}
+
 ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
@@ -95,6 +135,8 @@ the pitch during a video review, players with hands on hips looking toward
 the sideline, authentic athletic posture, balanced natural anatomy, realistic
 hands and faces. No screens with readable text.
 
+${momentLine}
+
 ${bothKitsLine(event)} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
@@ -106,6 +148,7 @@ Photorealistic editorial wide-angle sports photograph of exhausted
 footballers at the final whistle, some embracing, some collapsed to their
 knees on the pitch, authentic athletic posture, balanced natural anatomy,
 realistic hands and faces, mixed elation and dejection.
+${event.home.score === event.away.score ? 'The match ends level, an evenly shared mood of relief and frustration.' : Math.abs(event.home.score - event.away.score) >= 3 ? 'One side is euphoric after a dominant scoreline, the other visibly deflated.' : 'One side is narrowly triumphant, the other crestfallen after a close-fought result.'}
 
 ${bothKitsLine(event)} ${CAMERA_STYLE}
 
