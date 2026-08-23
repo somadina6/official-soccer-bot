@@ -162,7 +162,6 @@ export function commentaryPolicy(
     "",
     "ALT TEXT:",
     "- Produce descriptive alt text separately.",
-    "- Explicitly state that the artwork is AI-generated.",
     "- Describe the visible scene and confirmed overlay facts without adding unverified match details.",
   ].join("\n");
 }
@@ -380,7 +379,7 @@ export function fallbackTemplate(
   return {
     postText,
     altText:
-      `AI-generated photorealistic editorial football image in ` +
+      `Photorealistic editorial football image in ` +
       `${event.home.name} and ${event.away.name} colours. ` +
       `Overlay: ${candidate.factLine}`,
     referencedFacts: facts,

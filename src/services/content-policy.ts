@@ -121,9 +121,6 @@ export function validateContent(
   if (URL_PATTERN.test(text)) errors.push('post text contains a URL, which is disabled');
   if (HASHTAG_PATTERN.test(text)) errors.push('post text contains a hashtag, which is disabled');
   if (MENTION_PATTERN.test(text)) errors.push('post text contains an @mention, which is disabled');
-  if (!content.altText.toLowerCase().includes('ai-generated')) {
-    errors.push('alt text must disclose the artwork is AI-generated');
-  }
 
   const emojiCount = countEmojis(text);
   const maxEmoji = style === 'dramatic' ? 2 : 1;

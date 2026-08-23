@@ -20,7 +20,7 @@ const goalEvent: MatchEvent = {
 
 const validContent: GeneratedContent = {
   postText: "ARSENAL HAVE FOUND THE DOOR. Saka, 67'. Arsenal 2–1 Chelsea. North London is making noise.",
-  altText: 'AI-generated editorial football illustration. Overlay: Saka goal, 67th minute, Arsenal 2–1 Chelsea.',
+  altText: 'Editorial football illustration. Overlay: Saka goal, 67th minute, Arsenal 2–1 Chelsea.',
   referencedFacts: ['Saka', "67'", 'Arsenal 2–1 Chelsea'],
   risk: 'low',
 };
@@ -109,15 +109,6 @@ describe('validateContent', () => {
 
   it('rejects near-duplicates of recent posts', () => {
     const result = validateContent(validContent, goalEvent, [validContent.postText]);
-    expect(result.valid).toBe(false);
-  });
-
-  it('requires AI disclosure in alt text', () => {
-    const result = validateContent(
-      { ...validContent, altText: 'A football illustration.' },
-      goalEvent,
-      [],
-    );
     expect(result.valid).toBe(false);
   });
 

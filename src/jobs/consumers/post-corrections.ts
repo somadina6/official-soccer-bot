@@ -50,7 +50,7 @@ export function startPostCorrectionsConsumer(): () => void {
       'Celebrations returned with the receipt.',
     ].join('\n');
     const altText =
-      `AI-generated editorial football illustration. Overlay: VAR decision, ` +
+      `Editorial football illustration. Overlay: VAR decision, ` +
       `${event.home.name} ${event.home.score}\u2013${event.away.score} ${event.away.name}.`;
 
     const background = await solidFallbackBackground([
