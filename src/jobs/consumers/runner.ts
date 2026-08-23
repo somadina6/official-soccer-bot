@@ -41,6 +41,7 @@ export function startConsumer(
             continue;
           }
           try {
+            logger.debug({ queue, msgId: msg.msgId }, 'processing message');
             await handler(msg);
             await archiveMessage(queue, msg.msgId);
           } catch (error) {

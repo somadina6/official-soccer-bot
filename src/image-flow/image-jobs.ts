@@ -42,6 +42,13 @@ const JOB_COLUMNS =
 /** States in which a finished JPEG exists at `storage_path`. */
 export const IMAGE_READY_STATUSES: ImageJobStatus[] = ['stored', 'uploaded_to_x', 'fallback_used'];
 
+/**
+ * States in which the image job is finished trying, whether or not it
+ * produced a JPEG. 'failed' means generation gave up with no fallback: the
+ * event publishes to X as text-only rather than waiting forever.
+ */
+export const IMAGE_DONE_STATUSES: ImageJobStatus[] = [...IMAGE_READY_STATUSES, 'failed'];
+
 export async function findImageJob(matchEventId: number): Promise<ImageJob | null> {
   const { data, error } = await getSupabase()
     .from('media_assets')

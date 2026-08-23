@@ -1,5 +1,5 @@
 import { logger } from '../../observability/logger.js';
-import { findImageJob, IMAGE_READY_STATUSES } from '../../image-flow/image-jobs.js';
+import { findImageJob, IMAGE_DONE_STATUSES } from '../../image-flow/image-jobs.js';
 import { getSupabase } from '../../supabase/client.js';
 import { QUEUES, sendToQueue } from '../supabase-queues.js';
 import { loadEvent } from './shared.js';
@@ -35,7 +35,7 @@ export async function maybeEnqueueXPublishing(
   }
 
   const job = await findImageJob(matchEventId);
-  if (!job?.storage_path || !IMAGE_READY_STATUSES.includes(job.status)) {
+  if (!job || !IMAGE_DONE_STATUSES.includes(job.status)) {
     logger.debug({ matchEventId, status: job?.status }, 'publish join: image not ready');
     return;
   }

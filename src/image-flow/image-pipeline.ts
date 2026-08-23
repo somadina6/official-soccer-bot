@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { MatchEvent } from '../domain/match-event.js';
 import { logger } from '../observability/logger.js';
-import { composeEventImage, solidFallbackBackground } from '../services/visual-composer.js';
+import { composeEventImage } from '../services/visual-composer.js';
 import { storeArtwork } from '../supabase/storage.js';
 import { errorCodeOf, sanitizedErrorMessage } from './errors.js';
 import { generateEventArtwork } from './generate-event-artwork.js';
@@ -33,10 +33,14 @@ export function buildImmutableStoragePath(input: PrepareEventImageInput): string
  * part of this pipeline: it belongs to x-publishing, so an X outage never
  * stalls the image job or the publish join.
  *
- * Idempotent: a stored JPEG (or fallback) is reused, never regenerated. The
- * pgmq visibility timeout acts as the lease, so a row stuck in
+ * Idempotent: a stored JPEG is reused, never regenerated. The pgmq
+ * visibility timeout acts as the lease, so a row stuck in
  * 'generating'/'compositing' from a crashed worker is simply reclaimed when
  * the message becomes visible again.
+ *
+ * No fallback image is generated on failure: if AI generation, validation,
+ * or compositing fails, the job is marked 'failed' with no storage_path and
+ * the event is published to X as text-only (see publish-join / x-publishing).
  */
 export async function prepareEventImage(input: PrepareEventImageInput): Promise<ImageJob> {
   const { matchEventId, fixtureId, event } = input;
@@ -46,14 +50,15 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
     logger.debug({ matchEventId, storagePath: job.storage_path }, 'image job already complete');
     return job;
   }
+  if (job.status === 'failed') {
+    logger.debug({ matchEventId }, 'image job already failed; publishing without image');
+    return job;
+  }
 
   await markGenerating(job);
 
   let finalJpeg: Buffer;
-  let usedFallback = false;
   let generationDurationMs: number | null = null;
-  let lastErrorCode: string | null = null;
-  let lastErrorMessage: string | null = null;
 
   try {
     const prompt = buildEventImagePrompt(event);
@@ -65,48 +70,38 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
     finalJpeg = await composeEventImage(generated.image, event);
     finalJpeg = await enforceXLimit(finalJpeg);
   } catch (error) {
-    // Never let generation trouble block the live post: fall back to the
-    // deterministic gradient base with the same factual overlay.
-    usedFallback = true;
-    lastErrorCode = errorCodeOf(error);
-    lastErrorMessage = sanitizedErrorMessage(error);
+    const lastErrorCode = errorCodeOf(error);
+    const lastErrorMessage = sanitizedErrorMessage(error);
     logger.warn(
       { matchEventId, code: lastErrorCode, message: lastErrorMessage },
-      'image generation failed; using fallback artwork',
+      'image generation failed; publishing without image',
     );
-    try {
-      const base = await solidFallbackBackground([...event.home.colours, ...event.away.colours]);
-      finalJpeg = await composeEventImage(base, event);
-      finalJpeg = await enforceXLimit(finalJpeg);
-    } catch (fallbackError) {
-      await updateImageJob(job.id, {
-        status: 'failed',
-        last_error_code: errorCodeOf(fallbackError),
-        last_error_message: sanitizedErrorMessage(fallbackError),
-      });
-      throw fallbackError;
-    }
+    await updateImageJob(job.id, {
+      status: 'failed',
+      generation_duration_ms: generationDurationMs,
+      last_error_code: lastErrorCode,
+      last_error_message: lastErrorMessage,
+    });
+    return { ...job, status: 'failed', storage_path: null } as ImageJob;
   }
 
   const storagePath = buildImmutableStoragePath(input);
   await storeArtwork({ objectPath: storagePath, image: finalJpeg });
 
   await updateImageJob(job.id, {
-    status: usedFallback ? 'fallback_used' : 'stored',
+    status: 'stored',
     storage_path: storagePath,
     image_hash: createHash('sha256').update(finalJpeg).digest('hex'),
     byte_length: finalJpeg.length,
-    used_fallback: usedFallback,
     generation_duration_ms: generationDurationMs,
-    last_error_code: lastErrorCode,
-    last_error_message: lastErrorMessage,
+    last_error_code: null,
+    last_error_message: null,
   });
 
   logger.info(
     {
       matchEventId,
       storagePath,
-      usedFallback,
       generationDurationMs,
       byteLength: finalJpeg.length,
       promptVersion: IMAGE_PROMPT_VERSION,
@@ -114,6 +109,5 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
     'event image prepared',
   );
 
-  const done = { ...job, status: usedFallback ? 'fallback_used' : 'stored', storage_path: storagePath } as ImageJob;
-  return done;
+  return { ...job, status: 'stored', storage_path: storagePath } as ImageJob;
 }

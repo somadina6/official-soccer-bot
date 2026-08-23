@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { findImageJob, IMAGE_READY_STATUSES } from '../../image-flow/image-jobs.js';
+import { findImageJob, IMAGE_DONE_STATUSES, IMAGE_READY_STATUSES } from '../../image-flow/image-jobs.js';
 import { logger } from '../../observability/logger.js';
 import { publish } from '../../services/publisher.js';
 import { getSupabase } from '../../supabase/client.js';
@@ -36,24 +36,28 @@ export function startXPublishingConsumer(): () => void {
       if (row.state === 'PUBLISHED') return;
 
       const job = await findImageJob(matchEventId);
-      if (!job?.storage_path || !IMAGE_READY_STATUSES.includes(job.status)) {
-        logger.error({ matchEventId, status: job?.status }, 'x-publishing join fired without a stored image');
+      if (!job || !IMAGE_DONE_STATUSES.includes(job.status)) {
+        logger.error({ matchEventId, status: job?.status }, 'x-publishing join fired without a finished image job');
         return;
+      }
+
+      const hasImage = Boolean(job.storage_path) && IMAGE_READY_STATUSES.includes(job.status);
+      if (!hasImage) {
+        logger.info({ matchEventId, status: job.status }, 'no image available; publishing text-only');
       }
 
       const generation = await loadGeneration(contentGenerationId);
       await setEventState(matchEventId, 'PUBLISHING');
 
-      const image = await downloadArtwork(job.storage_path);
-      const imageHash = job.image_hash ?? createHash('sha256').update(image).digest('hex');
+      const image = hasImage ? await downloadArtwork(job.storage_path!) : null;
+      const imageHash = image ? (job.image_hash ?? createHash('sha256').update(image).digest('hex')) : null;
 
       const result = await publish({
         matchEventId,
         idempotencyKey,
         postText: generation.post_text,
         altText: generation.alt_text,
-        image,
-        imageHash,
+        ...(image ? { image, imageHash: imageHash! } : {}),
       });
 
       if (result.status === 'published' || result.status === 'already_published') {
