@@ -85,6 +85,14 @@ export function styleWeights(
   ];
 }
 
+/**
+ * Samples a commentary style from the given situation and tone.
+ *
+ * @param situation - The situation of the commentary.
+ * @param tone - The tone of the commentary.
+ * @param random - The random number generator.
+ * @returns The sampled commentary style.
+ */
 export function sampleCommentaryStyle(
   situation: CommentarySituation,
   tone: BanterTone,

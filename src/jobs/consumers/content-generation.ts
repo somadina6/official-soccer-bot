@@ -1,18 +1,25 @@
-import { loadEnv } from '../../config/env.js';
-import type { CommentaryStyle, ContentIntent, GeneratedContent } from '../../domain/content.js';
-import { logger } from '../../observability/logger.js';
-import { fallbackTemplate, generateCommentary } from '../../providers/openai/commentary.js';
-import { extractApprovedIncidentFacts } from '../../providers/sportsapi/mapper.js';
-import { rankCandidates } from '../../services/commentary-ranker.js';
-import { classifySituation } from '../../services/commentary-situation.js';
-import { sampleCommentaryStyle } from '../../services/commentary-style.js';
-import { validateContent } from '../../services/content-policy.js';
-import { loadRuntimeSettings } from '../../services/settings.js';
-import { getSupabase } from '../../supabase/client.js';
-import { QUEUES } from '../supabase-queues.js';
-import { maybeEnqueueXPublishing } from './publish-join.js';
-import { startConsumer } from './runner.js';
-import { loadEvent, requireMatchEventId, setEventState } from './shared.js';
+import { loadEnv } from "../../config/env.js";
+import type {
+  CommentaryStyle,
+  ContentIntent,
+  GeneratedContent,
+} from "../../domain/content.js";
+import { logger } from "../../observability/logger.js";
+import {
+  fallbackTemplate,
+  generateCommentary,
+} from "../../providers/openai/commentary.js";
+import { extractApprovedIncidentFacts } from "../../providers/sportsapi/mapper.js";
+import { rankCandidates } from "../../services/commentary-ranker.js";
+import { classifySituation } from "../../services/commentary-situation.js";
+import { sampleCommentaryStyle } from "../../services/commentary-style.js";
+import { validateContent } from "../../services/content-policy.js";
+import { loadRuntimeSettings } from "../../services/settings.js";
+import { getSupabase } from "../../supabase/client.js";
+import { QUEUES } from "../supabase-queues.js";
+import { maybeEnqueueXPublishing } from "./publish-join.js";
+import { startConsumer } from "./runner.js";
+import { loadEvent, requireMatchEventId, setEventState } from "./shared.js";
 
 /**
  * Operator-approved rivalry/context lines. Kept deliberately small; the model
@@ -20,27 +27,29 @@ import { loadEvent, requireMatchEventId, setEventState } from './shared.js';
  * whitelisted incident facts extracted from the raw provider payload.
  */
 const APPROVED_CONTEXT: string[] = [
-  'North London is Arsenal and Tottenham territory.',
-  'Manchester derbies split the city red and blue.',
-  'Merseyside derbies are Liverpool against Everton.',
+  "North London is Arsenal and Tottenham territory.",
+  "Manchester derbies split the city red and blue.",
+  "Merseyside derbies are Liverpool against Everton.",
 ];
 
 async function recentPostTexts(limit = 20): Promise<string[]> {
   const { data } = await getSupabase()
-    .from('published_posts')
-    .select('post_text')
-    .order('published_at', { ascending: false })
+    .from("published_posts")
+    .select("post_text")
+    .order("published_at", { ascending: false })
     .limit(limit);
-  return (data ?? []).map(row => row.post_text as string);
+  return (data ?? []).map((row) => row.post_text as string);
 }
 
-async function loadPersistedStyle(matchEventId: number): Promise<CommentaryStyle | undefined> {
+async function loadPersistedStyle(
+  matchEventId: number,
+): Promise<CommentaryStyle | undefined> {
   const { data } = await getSupabase()
-    .from('content_generations')
-    .select('style')
-    .eq('match_event_id', matchEventId)
-    .not('style', 'is', null)
-    .order('created_at', { ascending: true })
+    .from("content_generations")
+    .select("style")
+    .eq("match_event_id", matchEventId)
+    .not("style", "is", null)
+    .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   return (data?.style as CommentaryStyle | undefined) ?? undefined;
@@ -54,13 +63,13 @@ async function recordAttempt(
   usedFallback: boolean,
   style: CommentaryStyle,
 ): Promise<number> {
-  const intent: ContentIntent = 'live_reaction';
+  const intent: ContentIntent = "live_reaction";
   const { data, error } = await getSupabase()
-    .from('content_generations')
+    .from("content_generations")
     .insert({
       match_event_id: matchEventId,
       attempt,
-      model: usedFallback ? 'fallback-template' : loadEnv().OPENAI_TEXT_MODEL,
+      model: usedFallback ? "fallback-template" : loadEnv().OPENAI_TEXT_MODEL,
       post_text: content.postText,
       alt_text: content.altText,
       referenced_facts: content.referencedFacts,
@@ -73,9 +82,10 @@ async function recordAttempt(
       intent,
       style,
     })
-    .select('id')
+    .select("id")
     .single();
-  if (error) throw new Error(`content_generations insert failed: ${error.message}`);
+  if (error)
+    throw new Error(`content_generations insert failed: ${error.message}`);
   return data.id;
 }
 
@@ -87,15 +97,18 @@ async function recordAttempt(
 export function startContentGenerationConsumer(): () => void {
   return startConsumer(
     QUEUES.contentGeneration,
-    async msg => {
+    async (msg) => {
       const matchEventId = requireMatchEventId(msg.message.matchEventId);
       const { idempotencyKey } = msg.message;
       const row = await loadEvent(matchEventId);
-      if (!['CONFIRMED', 'GENERATING'].includes(row.state)) {
-        logger.debug({ matchEventId, state: row.state }, 'event not awaiting generation; skipping');
+      if (!["CONFIRMED", "GENERATING"].includes(row.state)) {
+        logger.debug(
+          { matchEventId, state: row.state },
+          "event not awaiting generation; skipping",
+        );
         return;
       }
-      await setEventState(matchEventId, 'GENERATING');
+      await setEventState(matchEventId, "GENERATING");
 
       const settings = await loadRuntimeSettings();
       const recent = await recentPostTexts(20);
@@ -103,14 +116,17 @@ export function startContentGenerationConsumer(): () => void {
         ...APPROVED_CONTEXT,
         ...extractApprovedIncidentFacts(row.rawPayload),
       ];
-      const intent: ContentIntent = 'live_reaction';
+      const intent: ContentIntent = "live_reaction";
       const situation = classifySituation(row.event, contextDictionary);
-      const style =
-        (await loadPersistedStyle(matchEventId)) ??
-        sampleCommentaryStyle(situation, settings.banterTone);
-      logger.debug({ matchEventId, intent, situation, style }, 'live reaction generation');
+      const style = sampleCommentaryStyle(situation, settings.banterTone);
+      logger.debug(
+        { matchEventId, intent, situation, style },
+        "live reaction generation",
+      );
 
-      let approved: { content: GeneratedContent; generationId: number } | undefined;
+      let approved:
+        | { content: GeneratedContent; generationId: number }
+        | undefined;
 
       for (let attempt = 1; attempt <= 2 && !approved; attempt++) {
         try {
@@ -131,39 +147,65 @@ export function startContentGenerationConsumer(): () => void {
             situation,
           );
           if (winner) {
-            const generationId = await recordAttempt(matchEventId, attempt, winner, [], false, style);
+            const generationId = await recordAttempt(
+              matchEventId,
+              attempt,
+              winner,
+              [],
+              false,
+              style,
+            );
             approved = { content: winner, generationId };
           } else {
             const failed: GeneratedContent = {
-              postText: ranked[0]?.postText ?? '',
+              postText: ranked[0]?.postText ?? "",
               altText: output.altText,
               referencedFacts: output.referencedFacts,
               risk: output.risk,
               candidates: output.candidates,
-              rankDebug: ranked.map(candidate => ({
+              rankDebug: ranked.map((candidate) => ({
                 hook: candidate.candidate.hook,
                 score: candidate.score,
                 valid: candidate.valid,
                 errors: candidate.errors,
               })),
             };
-            const errors = ranked.flatMap(entry => entry.errors);
-            await recordAttempt(matchEventId, attempt, failed, errors, false, style);
-            logger.warn({ matchEventId, attempt, errors }, 'generated content rejected');
+            const errors = ranked.flatMap((entry) => entry.errors);
+            await recordAttempt(
+              matchEventId,
+              attempt,
+              failed,
+              errors,
+              false,
+              style,
+            );
+            logger.warn(
+              { matchEventId, attempt, errors },
+              "generated content rejected",
+            );
           }
         } catch (error) {
           console.error(error);
-          logger.warn({ matchEventId, attempt, error }, 'commentary generation call failed');
+          logger.warn(
+            { matchEventId, attempt, error },
+            "commentary generation call failed",
+          );
         }
       }
 
       if (!approved) {
-        logger.warn({ matchEventId, attempt: 3 }, 'fallback template used');
+        logger.warn({ matchEventId, attempt: 3 }, "fallback template used");
         const fallback = fallbackTemplate(row.event, contextDictionary);
-        const result = validateContent(fallback, row.event, recent, contextDictionary, {
-          situation,
-          style: 'punchy',
-        });
+        const result = validateContent(
+          fallback,
+          row.event,
+          recent,
+          contextDictionary,
+          {
+            situation,
+            style: "punchy",
+          },
+        );
         const generationId = await recordAttempt(
           matchEventId,
           3,
@@ -173,14 +215,17 @@ export function startContentGenerationConsumer(): () => void {
           style,
         );
         if (!result.valid) {
-          await setEventState(matchEventId, 'MANUAL_REVIEW');
-          logger.error({ matchEventId, errors: result.errors }, 'fallback template rejected');
+          await setEventState(matchEventId, "MANUAL_REVIEW");
+          logger.error(
+            { matchEventId, errors: result.errors },
+            "fallback template rejected",
+          );
           return;
         }
         approved = { content: fallback, generationId };
       }
 
-      await setEventState(matchEventId, 'VALIDATED');
+      await setEventState(matchEventId, "VALIDATED");
       await maybeEnqueueXPublishing(matchEventId, idempotencyKey);
     },
     { visibilityTimeout: 120 },

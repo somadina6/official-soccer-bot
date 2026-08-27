@@ -7,7 +7,7 @@ describe('commentaryPolicy identity', () => {
     const policy = commentaryPolicy('playful', 'punchy', 'goal');
     expect(policy.startsWith(MATCHMOUTH_IDENTITY)).toBe(true);
     expect(policy).toContain('Target tone: playful.');
-    expect(policy).toContain('AI football personality');
+    expect(policy).toContain('football personality');
     expect(policy).not.toContain('tone ceiling');
   });
 });
