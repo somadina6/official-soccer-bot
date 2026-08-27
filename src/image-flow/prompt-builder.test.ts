@@ -18,7 +18,7 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v4');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v7');
   });
 
   it('uses the player name and authentic kit branding for a goal', () => {
@@ -33,6 +33,11 @@ describe('prompt builder', () => {
     expect(prompt).not.toContain('1 – 0');
   });
 
+  it('has teammates joining the celebration on a goal', () => {
+    const prompt = buildEventImagePrompt(base);
+    expect(prompt).toContain('join the celebration');
+  });
+
   it('falls back to generic wording when the player is missing', () => {
     const { player: _player, ...withoutPlayer } = base;
     const prompt = buildEventImagePrompt(withoutPlayer);
@@ -43,8 +48,46 @@ describe('prompt builder', () => {
     expect(buildEventImagePrompt({ ...base, type: 'RED_CARD' })).toContain('sending-off');
     expect(buildEventImagePrompt({ ...base, type: 'PENALTY_MISSED' })).toContain('missed penalty');
     expect(buildEventImagePrompt({ ...base, type: 'VAR' })).toContain('video review');
-    expect(buildEventImagePrompt({ ...base, type: 'FULL_TIME' })).toContain('final whistle');
-    expect(buildEventImagePrompt({ ...base, type: 'OWN_GOAL' })).toContain('celebrating immediately after scoring');
+    expect(buildEventImagePrompt({ ...base, type: 'FULL_TIME' })).toContain('Full-time result graphic');
+    expect(buildEventImagePrompt({ ...base, type: 'OWN_GOAL' })).toContain('anguish and disbelief');
+  });
+
+  it('credits the own goal to the benefiting side, not the scorer\'s side', () => {
+    const prompt = buildEventImagePrompt({ ...base, type: 'OWN_GOAL' });
+    expect(prompt).toContain('Erling Haaland');
+    expect(prompt).not.toContain('celebrating immediately after scoring');
+  });
+
+  it('describes goal scoreline drama: opener, equalizer, go-ahead, and lead extension', () => {
+    const opener = buildEventImagePrompt({ ...base, home: { ...base.home, score: 1 }, away: { ...base.away, score: 0 } });
+    expect(opener).toContain('opening goal of the match');
+
+    const equalizer = buildEventImagePrompt({ ...base, home: { ...base.home, score: 1 }, away: { ...base.away, score: 1 } });
+    expect(equalizer).toContain('levels the score at 1-1');
+
+    const goAhead = buildEventImagePrompt({ ...base, home: { ...base.home, score: 2 }, away: { ...base.away, score: 1 } });
+    expect(goAhead).toContain('puts Manchester City ahead 2-1');
+
+    const extend = buildEventImagePrompt({ ...base, home: { ...base.home, score: 3 }, away: { ...base.away, score: 1 } });
+    expect(extend).toContain("extends Manchester City's lead to 3-1");
+  });
+
+  it('credits an own goal scoreline to the benefiting side', () => {
+    const equalizer = buildEventImagePrompt({
+      ...base,
+      type: 'OWN_GOAL',
+      home: { ...base.home, score: 1 },
+      away: { ...base.away, score: 1 },
+    });
+    expect(equalizer).toContain('own goal levels the score at 1-1');
+
+    const goAhead = buildEventImagePrompt({
+      ...base,
+      type: 'OWN_GOAL',
+      home: { ...base.home, score: 2 },
+      away: { ...base.away, score: 1 },
+    });
+    expect(goAhead).toContain('own goal puts Manchester City ahead 2-1');
   });
 
   it('names both clubs on VAR and full-time prompts', () => {
@@ -56,7 +99,8 @@ describe('prompt builder', () => {
     const fullTime = buildEventImagePrompt({ ...base, type: 'FULL_TIME' });
     expect(fullTime).toContain('Manchester City');
     expect(fullTime).toContain('Arsenal');
-    expect(fullTime).toContain('sponsor logos');
+    expect(fullTime).toContain('club crest');
+    expect(fullTime).toContain('no players, no people');
   });
 
   it('describes stoppage-time drama when a stoppage minute is present', () => {
@@ -91,9 +135,17 @@ describe('prompt builder', () => {
     expect(draw).toContain('ends level');
 
     const rout = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 4 }, away: { ...base.away, score: 0 } });
-    expect(rout).toContain('dominant scoreline');
+    expect(rout).toContain('dominant, one-sided');
 
     const narrow = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 2 }, away: { ...base.away, score: 1 } });
-    expect(narrow).toContain('narrowly triumphant');
+    expect(narrow).toContain('narrowly decided');
+  });
+
+  it('shows both crests and no players, leaving the scoreline to the deterministic overlay', () => {
+    const prompt = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 2 }, away: { ...base.away, score: 1 } });
+    expect(prompt).toContain('#6CADDF');
+    expect(prompt).toContain('deterministic overlay');
+    expect(prompt).not.toContain('celebrating');
+    expect(prompt).not.toContain('"2 - 1"');
   });
 });
