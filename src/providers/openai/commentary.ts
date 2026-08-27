@@ -103,7 +103,7 @@ export function commentaryPolicy(
     "  Add a punchline only when there is a genuinely separate joke, not a restatement of the hook.",
     "- Do not pad a post to three lines out of habit — most real fan tweets are one blunt sentence, not a mini-article.",
     "- The published post is the non-empty lines joined by a blank line.",
-    "- Target roughly 15–220 characters depending on how many lines you use. Absolute maximum: 280.",
+    "- Target roughly 100–220 characters depending on how many lines you use. Absolute maximum: 280.",
     ...candidateGuidance,
     "- Both must follow the assigned style, but approach the event from different angles.",
     "- Vary how many lines each candidate uses: it looks scripted if both candidates are always three lines.",

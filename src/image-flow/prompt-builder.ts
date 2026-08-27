@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v4';
+export const IMAGE_PROMPT_VERSION = 'prompt-v7';
 
 const SHARED_CONSTRAINTS = `
 No scoreboard, watermark, duplicate people, distorted limbs or extra fingers.
@@ -44,6 +44,22 @@ function bothKitsLine(event: MatchEvent): string {
   return `Players wearing authentic ${event.home.name} kits${coloursLineFor(event.home)} against ${event.away.name} kits${coloursLineFor(event.away)}, club crests, sponsor logos, and league badges visible.`;
 }
 
+function crestLineFor(side: MatchEvent['home']): string {
+  return `${side.name} club crest${coloursLineFor(side)}`;
+}
+
+/**
+ * Full-time is a graphic, not a photo. The scoreline itself is left to the
+ * deterministic overlay composed on top afterward (visual-composer.ts),
+ * since image models render digits and text unreliably.
+ */
+const FULL_TIME_CONSTRAINTS = `
+No players, no people, no photographs of humans. No scoreboard, score
+digits, or any lettering — the accurate scoreline is added afterward by a
+deterministic overlay. No watermark. Crests must not be duplicated, invented
+beyond the two named clubs, or distorted.
+`.trim();
+
 function subjectFor(event: MatchEvent): string {
   return event.player?.name ?? 'a football player';
 }
@@ -76,6 +92,53 @@ function assistLineFor(event: MatchEvent): string {
   return event.assist?.name ? ` Moments earlier, ${event.assist.name} supplied the assist.` : '';
 }
 
+/**
+ * The side whose score benefits from this goal: the scorer's side for a
+ * GOAL, but the *other* side for an OWN_GOAL, since kitSideFor identifies
+ * the unlucky player who put it in his own net.
+ */
+function beneficiarySideFor(event: MatchEvent): MatchEvent['home'] {
+  const scorerSide = kitSideFor(event);
+  if (event.type !== 'OWN_GOAL') {
+    return scorerSide;
+  }
+  return scorerSide === event.home ? event.away : event.home;
+}
+
+/**
+ * Scoreline drama for a goal or own goal, so an opener, an equalizer, a
+ * go-ahead strike, and a lead extension don't all read as the same generic
+ * celebration. kitSideFor always credits the goal to the side the
+ * scoreboard currently favours (or ties), so the beneficiary's score is
+ * never lower than the opponent's here.
+ */
+function goalContextLineFor(event: MatchEvent): string {
+  const beneficiary = beneficiarySideFor(event);
+  const opponent = beneficiary === event.home ? event.away : event.home;
+  const own = event.type === 'OWN_GOAL';
+  const totalGoals = event.home.score + event.away.score;
+  const margin = beneficiary.score - opponent.score;
+
+  if (totalGoals === 1) {
+    return own
+      ? ` An early own goal hands ${beneficiary.name} a ${beneficiary.score}-${opponent.score} lead.`
+      : ` It is the opening goal of the match.`;
+  }
+  if (margin === 0) {
+    return own
+      ? ` The own goal levels the score at ${beneficiary.score}-${opponent.score}.`
+      : ` The goal levels the score at ${beneficiary.score}-${opponent.score}.`;
+  }
+  if (margin === 1) {
+    return own
+      ? ` The own goal puts ${beneficiary.name} ahead ${beneficiary.score}-${opponent.score}.`
+      : ` The goal puts ${beneficiary.name} ahead ${beneficiary.score}-${opponent.score}.`;
+  }
+  return own
+    ? ` The own goal extends ${beneficiary.name}'s lead to ${beneficiary.score}-${opponent.score}.`
+    : ` The goal extends ${beneficiary.name}'s lead to ${beneficiary.score}-${opponent.score}.`;
+}
+
 /** Builds the photorealistic editorial prompt for one confirmed event. */
 export function buildEventImagePrompt(event: MatchEvent): string {
   const player = subjectFor(event);
@@ -84,14 +147,31 @@ export function buildEventImagePrompt(event: MatchEvent): string {
 
   switch (event.type) {
     case 'GOAL':
-    case 'OWN_GOAL':
       return `
 Photorealistic editorial sports photograph of ${player}
 celebrating immediately after scoring, full-body action pose, sprinting toward
 the corner, authentic athletic movement, balanced natural anatomy, realistic
-hands and face, visible emotion, sweat and fabric detail.
+hands and face, visible emotion, sweat and fabric detail. Teammates in
+matching kits are closing in from behind to join the celebration, arms
+raised, some mid-sprint, genuine shared joy on their faces.
 
-${momentLine}${assistLineFor(event)}
+${momentLine}${assistLineFor(event)}${goalContextLineFor(event)}
+
+${kitLine} ${CAMERA_STYLE}
+
+${SHARED_CONSTRAINTS}
+`.trim();
+
+    case 'OWN_GOAL':
+      return `
+Photorealistic editorial sports photograph of ${player}
+reacting with anguish and disbelief moments after an own goal, hands on head
+or covering the face, body turned away from teammates, authentic athletic
+posture, balanced natural anatomy, realistic hands and face, raw emotion,
+sweat and fabric detail. Nearby opponents show restrained, sportsmanlike
+celebration rather than mockery.
+
+${momentLine}${goalContextLineFor(event)}
 
 ${kitLine} ${CAMERA_STYLE}
 
@@ -142,17 +222,26 @@ ${bothKitsLine(event)} ${CAMERA_STYLE}
 ${SHARED_CONSTRAINTS}
 `.trim();
 
-    case 'FULL_TIME':
+    case 'FULL_TIME': {
+      const margin = Math.abs(event.home.score - event.away.score);
+      const moodLine =
+        event.home.score === event.away.score
+          ? 'The match ends level, a hard-fought, evenly shared result.'
+          : margin >= 3
+            ? 'A dominant, one-sided final scoreline.'
+            : 'A close result, narrowly decided.';
       return `
-Photorealistic editorial wide-angle sports photograph of exhausted
-footballers at the final whistle, some embracing, some collapsed to their
-knees on the pitch, authentic athletic posture, balanced natural anatomy,
-realistic hands and faces, mixed elation and dejection.
-${event.home.score === event.away.score ? 'The match ends level, an evenly shared mood of relief and frustration.' : Math.abs(event.home.score - event.away.score) >= 3 ? 'One side is euphoric after a dominant scoreline, the other visibly deflated.' : 'One side is narrowly triumphant, the other crestfallen after a close-fought result.'}
+Full-time result graphic, no players, no people, no photographs of humans.
+Clean modern sports broadcast graphic style: the ${crestLineFor(event.home)}
+on the left facing the ${crestLineFor(event.away)} on the right, separated by
+a bold abstract divider, set against a subtly blurred, floodlit stadium
+backdrop. Balanced, centered composition with clear space around each
+crest.
 
-${bothKitsLine(event)} ${CAMERA_STYLE}
+${moodLine}
 
-${SHARED_CONSTRAINTS}
+${FULL_TIME_CONSTRAINTS}
 `.trim();
+    }
   }
 }
