@@ -52,7 +52,7 @@ const EnvSchema = z.object({
     .number()
     .int()
     .positive()
-    .default(30_000),
+    .default(40_000),
   IMAGE_OUTPUT_COMPRESSION: z.coerce
     .number()
     .int()

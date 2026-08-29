@@ -63,8 +63,8 @@ async function main(): Promise<void> {
     minute: 69,
     occurredAt: new Date().toISOString(),
     home: { id: "1", name: "ManCity", score: 6, colours: homeTeam.colours },
-    away: { id: "2", name: "Arsenal", score: 0, colours: awayTeam.colours },
-    player: { id: "10", name: "Jeremy Doku" },
+    away: { id: "2", name: "Crystal Palace", score: 0, colours: awayTeam.colours },
+    player: { id: "10", name: "Phil Foden" },
     rawPayloadHash: createHash("sha256").update(incidentId).digest("hex"),
   };
   const idempotencyKey = `sportsapi-pro:${TEST_PROVIDER_MATCH_ID}:${incidentId}:0`;

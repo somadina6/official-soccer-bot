@@ -5,20 +5,23 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v7';
+export const IMAGE_PROMPT_VERSION = 'prompt-v8';
 
 const SHARED_CONSTRAINTS = `
 No scoreboard, watermark, duplicate people, distorted limbs or extra fingers.
 Kit branding (club crests, sponsor marks, league sleeve patches) is allowed;
 do not invent a scoreboard or overlay lettering.
-Leave the lower third of the frame calmer so a deterministic overlay can be added later.
+Leave a calm margin at the very top and bottom of the frame so a
+deterministic scoreboard bar and caption can be composited afterward.
 `.trim();
 
 const CAMERA_STYLE = `
-Packed English football stadium at night, supporters softly blurred in the
-background, dramatic floodlights, shallow depth of field, 85mm sports
-photography, 1/1000 second shutter speed, crisp subject, cinematic colour
-grading.
+Tight, cinematic close-up framed from the chest up, shot like a modern
+official football club account hero image: long telephoto lens, shallow
+depth of field, the packed floodlit stadium reduced to soft glowing bokeh
+behind the subject. Punchy contemporary sports colour grade, deep contrast,
+cool shadow tones, warm accurate skin tones, crisp tack-sharp subject
+detail, freeze-frame sports photography.
 `.trim();
 
 /**
@@ -55,9 +58,10 @@ function crestLineFor(side: MatchEvent['home']): string {
  */
 const FULL_TIME_CONSTRAINTS = `
 No players, no people, no photographs of humans. No scoreboard, score
-digits, or any lettering — the accurate scoreline is added afterward by a
-deterministic overlay. No watermark. Crests must not be duplicated, invented
-beyond the two named clubs, or distorted.
+digits, or any lettering — the accurate scoreline and result label are added
+afterward by a deterministic overlay. No watermark. Crests must not be
+duplicated, invented beyond the two named clubs, or distorted. Leave a calm
+margin at the very top of the frame for the scoreboard bar.
 `.trim();
 
 function subjectFor(event: MatchEvent): string {
@@ -148,12 +152,12 @@ export function buildEventImagePrompt(event: MatchEvent): string {
   switch (event.type) {
     case 'GOAL':
       return `
-Photorealistic editorial sports photograph of ${player}
-celebrating immediately after scoring, full-body action pose, sprinting toward
-the corner, authentic athletic movement, balanced natural anatomy, realistic
-hands and face, visible emotion, sweat and fabric detail. Teammates in
-matching kits are closing in from behind to join the celebration, arms
-raised, some mid-sprint, genuine shared joy on their faces.
+Photorealistic close-up sports photograph of ${player}
+mid-celebration immediately after scoring, chest-up framing, raw unfiltered
+emotion on the face — roar, clenched fist, or head thrown back — authentic
+athletic posture, balanced natural anatomy, realistic hands and face, sweat
+and fabric detail. A teammate may be softly out of focus in the far
+background, but ${player} is the single clear hero of the frame.
 
 ${momentLine}${assistLineFor(event)}${goalContextLineFor(event)}
 
@@ -164,12 +168,12 @@ ${SHARED_CONSTRAINTS}
 
     case 'OWN_GOAL':
       return `
-Photorealistic editorial sports photograph of ${player}
-reacting with anguish and disbelief moments after an own goal, hands on head
-or covering the face, body turned away from teammates, authentic athletic
-posture, balanced natural anatomy, realistic hands and face, raw emotion,
-sweat and fabric detail. Nearby opponents show restrained, sportsmanlike
-celebration rather than mockery.
+Photorealistic close-up sports photograph of ${player}
+reacting with anguish and disbelief moments after an own goal, chest-up
+framing, hands on head or covering the face, authentic athletic posture,
+balanced natural anatomy, realistic hands and face, raw emotion, sweat and
+fabric detail. An opponent may be softly out of focus in the far background,
+showing restrained, sportsmanlike celebration rather than mockery.
 
 ${momentLine}${goalContextLineFor(event)}
 
@@ -180,11 +184,11 @@ ${SHARED_CONSTRAINTS}
 
     case 'RED_CARD':
       return `
-Photorealistic editorial sports photograph of ${player}
-reacting with disbelief moments after a sending-off, head bowed or hands on
-head, walking away from the referee, authentic athletic posture, balanced
-natural anatomy, realistic hands and face, raw emotion, sweat and fabric
-detail. The referee is out of frame.
+Photorealistic close-up sports photograph of ${player}
+reacting with disbelief moments after a sending-off, chest-up framing, head
+bowed or hands on head, authentic athletic posture, balanced natural
+anatomy, realistic hands and face, raw emotion, sweat and fabric detail. The
+referee is out of frame.
 
 ${momentLine}
 
@@ -195,11 +199,10 @@ ${SHARED_CONSTRAINTS}
 
     case 'PENALTY_MISSED':
       return `
-Photorealistic editorial sports photograph of ${player}
-in the instant of anguish after a missed penalty, hands rising toward the
-face, body turning away from the goal, authentic athletic movement, balanced
-natural anatomy, realistic hands and face, visible despair, sweat and fabric
-detail.
+Photorealistic close-up sports photograph of ${player}
+in the instant of anguish after a missed penalty, chest-up framing, hands
+rising toward the face, authentic athletic posture, balanced natural
+anatomy, realistic hands and face, visible despair, sweat and fabric detail.
 
 ${momentLine}
 
@@ -210,10 +213,10 @@ ${SHARED_CONSTRAINTS}
 
     case 'VAR':
       return `
-Photorealistic editorial sports photograph of tense footballers waiting on
-the pitch during a video review, players with hands on hips looking toward
-the sideline, authentic athletic posture, balanced natural anatomy, realistic
-hands and faces. No screens with readable text.
+Photorealistic close-up sports photograph of tense footballers waiting on
+the pitch during a video review, chest-up framing, players with hands on
+hips looking toward the sideline, authentic athletic posture, balanced
+natural anatomy, realistic hands and faces. No screens with readable text.
 
 ${momentLine}
 
@@ -232,11 +235,11 @@ ${SHARED_CONSTRAINTS}
             : 'A close result, narrowly decided.';
       return `
 Full-time result graphic, no players, no people, no photographs of humans.
-Clean modern sports broadcast graphic style: the ${crestLineFor(event.home)}
-on the left facing the ${crestLineFor(event.away)} on the right, separated by
-a bold abstract divider, set against a subtly blurred, floodlit stadium
-backdrop. Balanced, centered composition with clear space around each
-crest.
+Clean, modern, cinematic sports broadcast graphic style: the
+${crestLineFor(event.home)} on the left facing the ${crestLineFor(event.away)}
+on the right, separated by a bold abstract divider, set against a subtly
+blurred, floodlit stadium backdrop with punchy contemporary colour grading.
+Balanced, centered composition with clear space around each crest.
 
 ${moodLine}
 

@@ -15,8 +15,11 @@ const EVENT_LABELS: Record<MatchEvent['type'], string> = {
   RED_CARD: 'RED CARD',
   PENALTY_MISSED: 'PENALTY MISSED',
   VAR: 'VAR DECISION',
-  FULL_TIME: 'FULL TIME',
+  FULL_TIME: 'FULL-TIME',
 };
+
+const TOP_BAR_HEIGHT = 190;
+const BAR_PADDING = 56;
 
 export function escapeXml(text: string): string {
   return text
@@ -37,38 +40,74 @@ export function truncateLabel(text: string, maxChars: number): string {
 }
 
 /**
- * Deterministic score-card overlay (plan section 10): the image model paints
- * the scene, but every factual element — event label, player, minute, score,
- * team names — is rendered by code so it is always exactly right.
+ * Top scoreboard bar: home team + score on the left, away team + score on
+ * the right, event label in a centered pill. Mirrors the clean broadcast
+ * scoreboard look official club accounts use, with every digit rendered by
+ * code so it is always exactly right.
  */
-function overlaySvg(event: MatchEvent): string {
+function scoreboardSvg(event: MatchEvent): string {
   const label = EVENT_LABELS[event.type];
+  const home = escapeXml(truncateLabel(event.home.name, 22));
+  const away = escapeXml(truncateLabel(event.away.name, 22));
+  const nameY = 74;
+  const scoreY = 152;
+  const pillWidth = Math.max(180, label.length * 17 + 64);
+  const pillX = (IMAGE_WIDTH - pillWidth) / 2;
+  const pillY = (TOP_BAR_HEIGHT - 56) / 2;
+
+  return `
+  <rect x="0" y="0" width="${IMAGE_WIDTH}" height="${TOP_BAR_HEIGHT}" fill="#0a1526" fill-opacity="0.93"/>
+  <text x="${BAR_PADDING}" y="${nameY}" font-family="Arial, Helvetica, sans-serif" font-size="28"
+        font-weight="700" fill="#c9d3e0" letter-spacing="1">${home}</text>
+  <text x="${BAR_PADDING}" y="${scoreY}" font-family="Arial Black, Helvetica, sans-serif" font-size="64"
+        font-weight="900" fill="#ffffff">${event.home.score}</text>
+  <text x="${IMAGE_WIDTH - BAR_PADDING}" y="${nameY}" text-anchor="end"
+        font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#c9d3e0"
+        letter-spacing="1">${away}</text>
+  <text x="${IMAGE_WIDTH - BAR_PADDING}" y="${scoreY}" text-anchor="end"
+        font-family="Arial Black, Helvetica, sans-serif" font-size="64" font-weight="900"
+        fill="#ffffff">${event.away.score}</text>
+  <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="56" rx="28" fill="#ffffff"
+        fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1.5"/>
+  <text x="${IMAGE_WIDTH / 2}" y="${pillY + 37}" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800" fill="#ffffff"
+        letter-spacing="3">${label}</text>
+`;
+}
+
+/** Bottom player caption: name and minute only, in clean white text. Skipped when no player is involved. */
+function captionSvg(event: MatchEvent): string {
+  if (!event.player || event.type === 'FULL_TIME') return '';
   const minute = event.stoppageMinute
     ? `${event.minute}+${event.stoppageMinute}'`
     : `${event.minute}'`;
-  const player = event.player ? escapeXml(truncateLabel(event.player.name, 42)) : '';
-  const home = escapeXml(truncateLabel(event.home.name, 22));
-  const away = escapeXml(truncateLabel(event.away.name, 22));
-  const scoreline = `${home}  ${event.home.score} \u2013 ${event.away.score}  ${away}`;
-  const detailLine = [player, event.type === 'FULL_TIME' ? '' : minute]
-    .filter(Boolean)
-    .join('  \u00b7  ');
+  const player = escapeXml(truncateLabel(event.player.name, 42));
+  const fadeTop = IMAGE_HEIGHT - 260;
 
-  const fadeTop = IMAGE_HEIGHT - 320;
-  return `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  return `
   <defs>
     <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.85"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="${fadeTop}" width="${IMAGE_WIDTH}" height="320" fill="url(#fade)"/>
-  <text x="72" y="${IMAGE_HEIGHT - 216}" font-family="Arial Black, Helvetica, sans-serif" font-size="64"
-        font-weight="900" fill="#ffffff" letter-spacing="2">${label}</text>
-  ${detailLine ? `<text x="72" y="${IMAGE_HEIGHT - 140}" font-family="Arial, Helvetica, sans-serif" font-size="44"
-        font-weight="700" fill="#ffffff">${detailLine}</text>` : ''}
-  <text x="72" y="${IMAGE_HEIGHT - 64}" font-family="Arial, Helvetica, sans-serif" font-size="38"
-        font-weight="600" fill="#e8e8e8">${scoreline}</text>
+  <rect x="0" y="${fadeTop}" width="${IMAGE_WIDTH}" height="260" fill="url(#fade)"/>
+  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 128}" font-family="Arial, Helvetica, sans-serif" font-size="52"
+        font-weight="800" fill="#ffffff">${player}</text>
+  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 68}" font-family="Arial, Helvetica, sans-serif" font-size="34"
+        font-weight="600" fill="#e3e8ef">${minute}</text>
+`;
+}
+
+/**
+ * Deterministic overlay (plan section 10): the image model paints the
+ * scene, but every factual element — event label, player, minute, score,
+ * team names — is rendered by code so it is always exactly right.
+ */
+function overlaySvg(event: MatchEvent): string {
+  return `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  ${scoreboardSvg(event)}
+  ${captionSvg(event)}
 </svg>`;
 }
 

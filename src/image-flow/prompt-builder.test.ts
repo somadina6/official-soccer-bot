@@ -18,7 +18,7 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v7');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v8');
   });
 
   it('uses the player name and authentic kit branding for a goal', () => {
@@ -27,15 +27,16 @@ describe('prompt builder', () => {
     expect(prompt).toContain('Manchester City');
     expect(prompt).toContain('club crest');
     expect(prompt).toContain('sponsor logos');
-    expect(prompt).toContain('celebrating immediately after scoring');
+    expect(prompt).toContain('mid-celebration immediately after scoring');
     expect(prompt).not.toContain('without logos');
     expect(prompt).not.toContain('No club crests');
     expect(prompt).not.toContain('1 – 0');
   });
 
-  it('has teammates joining the celebration on a goal', () => {
+  it('frames the goal as a tight close-up on a single hero subject', () => {
     const prompt = buildEventImagePrompt(base);
-    expect(prompt).toContain('join the celebration');
+    expect(prompt).toContain('chest-up framing');
+    expect(prompt).toContain('single clear hero of the frame');
   });
 
   it('falls back to generic wording when the player is missing', () => {
