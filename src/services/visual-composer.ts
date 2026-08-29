@@ -112,13 +112,33 @@ function overlaySvg(event: MatchEvent): string {
 </svg>`;
 }
 
-/** Composes the final 1536×1024 JPEG from generated (or fallback) artwork plus the overlay. */
-export async function composeEventImage(background: Buffer, event: MatchEvent): Promise<Buffer> {
+export type ComposeEventImageOptions = {
+  /**
+   * When false, skips the deterministic scoreboard/caption overlay: the
+   * prompt now asks the image model to render the scoreboard and player
+   * name itself (prompt-builder.ts), so compositing it again would draw a
+   * duplicate. Used by the AI pipeline (image-pipeline.ts); left on for
+   * callers with no AI photo at all, like the VAR-correction fallback
+   * (post-corrections.ts), which still needs code to draw every fact.
+   */
+  overlay?: boolean;
+};
+
+/** Composes the final 1024×1536 JPEG from generated (or fallback) artwork, optionally plus the overlay. */
+export async function composeEventImage(
+  background: Buffer,
+  event: MatchEvent,
+  options: ComposeEventImageOptions = {},
+): Promise<Buffer> {
+  const overlay = options.overlay ?? true;
   try {
-    const image = await sharp(background)
+    let pipeline = sharp(background)
       .rotate()
-      .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' })
-      .composite([{ input: Buffer.from(overlaySvg(event)), top: 0, left: 0 }])
+      .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' });
+    if (overlay) {
+      pipeline = pipeline.composite([{ input: Buffer.from(overlaySvg(event)), top: 0, left: 0 }]);
+    }
+    const image = await pipeline
       .jpeg({ quality: 85, progressive: true, chromaSubsampling: '4:4:4' })
       .toBuffer();
     await maybeWriteLocalPreview(image, event);

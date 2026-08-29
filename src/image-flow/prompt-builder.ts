@@ -5,15 +5,77 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v10';
+export const IMAGE_PROMPT_VERSION = 'prompt-v11';
 
 const SHARED_CONSTRAINTS = `
-No scoreboard, watermark, duplicate people, distorted limbs or extra fingers.
-Kit branding (club crests, sponsor marks, league sleeve patches) is allowed;
-do not invent a scoreboard or overlay lettering.
-Leave a calm margin at the very top and bottom of the frame so a
-deterministic scoreboard bar and caption can be composited afterward.
+No duplicate people, distorted limbs, or extra fingers. Kit branding (club
+crests, sponsor marks, league sleeve patches) is allowed. No watermark, and
+no stray or invented text anywhere in the image beyond what is specified
+below.
 `.trim();
+
+const EVENT_LABELS: Record<MatchEvent['type'], string> = {
+  GOAL: 'GOAL',
+  OWN_GOAL: 'OWN GOAL',
+  RED_CARD: 'RED CARD',
+  PENALTY_MISSED: 'PENALTY MISSED',
+  VAR: 'VAR DECISION',
+  FULL_TIME: 'FULL-TIME',
+};
+
+/**
+ * Model-rendered scoreboard + caption instructions, replacing the old
+ * deterministic Sharp overlay for AI-generated events (visual-composer.ts
+ * skips its overlay for this pipeline — see ComposeEventImageOptions).
+ * Tested across several samples (long team names, double-digit scores,
+ * accented names) and the model rendered every case correctly; still
+ * inherently probabilistic compared to code-drawn text, so keep an eye on
+ * production output.
+ */
+function scoreboardInstructionsFor(event: MatchEvent): string {
+  const label = EVENT_LABELS[event.type];
+  const home = event.home.name.toUpperCase();
+  const away = event.away.name.toUpperCase();
+  const requiredStrings = [
+    `"${home}"`,
+    `"${away}"`,
+    `"${event.home.score}"`,
+    `"${event.away.score}"`,
+    `"${label}"`,
+  ];
+
+  let playerBlock = '';
+  if (event.player && event.type !== 'FULL_TIME') {
+    const player = event.player.name.toUpperCase();
+    const minute = minuteLabel(event);
+    playerBlock = `
+2. Near the bottom of the frame, large bold white capital letters reading
+   "${player}" on one line, and directly below it, smaller white text
+   reading "${minute}".
+`;
+    requiredStrings.push(`"${player}"`, `"${minute}"`);
+  }
+
+  return `
+This image MUST include the following text and graphic elements, rendered
+crisply and accurately as part of the composition, not a caption added
+afterward:
+
+1. A solid dark navy bar across the very top of the frame, about one eighth
+   of the image height. On the far left of that bar, the text "${home}" in
+   bold white sans-serif, with the number "${event.home.score}" in large
+   bold white directly beneath it. On the far right of that bar, the text
+   "${away}" in bold white sans-serif, with the number "${event.away.score}"
+   in large bold white directly beneath it. In the exact center of that bar,
+   a white rounded pill outline containing the words "${label}" in bold
+   white capital letters. If a team name is long, wrap it onto two lines
+   rather than letting it overlap the pill.
+${playerBlock}
+Every character in ${requiredStrings.join(', ')} must be spelled correctly,
+letter for letter, legible, and exactly as given above — no invented,
+duplicated, or garbled text anywhere else in the image.
+`.trim();
+}
 
 const CAMERA_STYLE = `
 Vertical portrait orientation. Tight, cinematic close-up framed from the
@@ -112,17 +174,12 @@ function crestLineFor(side: MatchEvent['home']): string {
   return `${side.name} club crest${coloursLineFor(side)}`;
 }
 
-/**
- * Full-time is a graphic, not a photo. The scoreline itself is left to the
- * deterministic overlay composed on top afterward (visual-composer.ts),
- * since image models render digits and text unreliably.
- */
+/** Full-time is a graphic, not a photo, but now also model-rendered — see scoreboardInstructionsFor. */
 const FULL_TIME_CONSTRAINTS = `
-No players, no people, no photographs of humans. No scoreboard, score
-digits, or any lettering — the accurate scoreline and result label are added
-afterward by a deterministic overlay. No watermark. Crests must not be
-duplicated, invented beyond the two named clubs, or distorted. Leave a calm
-margin at the very top of the frame for the scoreboard bar.
+No players, no people, no photographs of humans in the backdrop art. Crests
+must not be duplicated, invented beyond the two named clubs, or distorted.
+No watermark, and no stray or invented text anywhere in the image beyond
+what is specified below.
 `.trim();
 
 function subjectFor(event: MatchEvent): string {
@@ -225,6 +282,8 @@ ${momentLine}${assistLineFor(event)}${goalContextLineFor(event)}
 ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
+
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -243,6 +302,8 @@ ${momentLine}${goalContextLineFor(event)}
 ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
+
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -259,6 +320,8 @@ ${momentLine}
 ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
+
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -275,6 +338,8 @@ ${momentLine}
 ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
+
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -290,6 +355,8 @@ ${momentLine}
 ${bothKitsLine(event)} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
+
+${scoreboardInstructionsFor(event)}
 `.trim();
 
     case 'FULL_TIME': {
@@ -312,6 +379,8 @@ around each crest.
 ${moodLine}
 
 ${FULL_TIME_CONSTRAINTS}
+
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
   }

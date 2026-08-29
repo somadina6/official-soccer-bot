@@ -67,7 +67,7 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
     await validateGenerated(generated.image);
 
     await updateImageJob(job.id, { status: 'compositing' });
-    finalJpeg = await composeEventImage(generated.image, event);
+    finalJpeg = await composeEventImage(generated.image, event, { overlay: false });
     finalJpeg = await enforceXLimit(finalJpeg);
   } catch (error) {
     const lastErrorCode = errorCodeOf(error);

@@ -53,7 +53,7 @@ describe('image validator', () => {
 describe('storage path and media expiry', () => {
   it('builds an immutable versioned path', () => {
     const path = buildImmutableStoragePath({ matchEventId: 99, fixtureId: 1, event });
-    expect(path).toMatch(/^\d{4}\/abc\/99-prompt-v10\.jpg$/);
+    expect(path).toMatch(/^\d{4}\/abc\/99-prompt-v11\.jpg$/);
   });
 
   it('treats missing or past expiry as expired', () => {
