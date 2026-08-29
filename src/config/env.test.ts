@@ -20,7 +20,7 @@ describe('parseEnv image provider', () => {
     expect(env.IMAGE_PROVIDER).toBe('openai');
     expect(env.REPLICATE_API_TOKEN).toBeUndefined();
     expect(env.REPLICATE_IMAGE_MODEL).toBe('xai/grok-imagine-image');
-    expect(env.REPLICATE_IMAGE_ASPECT_RATIO).toBe('3:2');
+    expect(env.REPLICATE_IMAGE_ASPECT_RATIO).toBe('2:3');
     expect(env.REPLICATE_IMAGE_RESOLUTION).toBeUndefined();
   });
 

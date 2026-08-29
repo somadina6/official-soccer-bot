@@ -106,7 +106,7 @@ async function bytesFromOutput(
 }
 
 /**
- * Generates one landscape editorial JPEG via Replicate Grok Imagine. Mirrors
+ * Generates one portrait editorial JPEG via Replicate Grok Imagine. Mirrors
  * the OpenAI generator contract: product deadline, at most one 429/5xx retry,
  * JPEG bytes for the rest of the image pipeline.
  */

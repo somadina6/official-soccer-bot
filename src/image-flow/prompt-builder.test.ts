@@ -18,7 +18,7 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v7');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v11');
   });
 
   it('uses the player name and authentic kit branding for a goal', () => {
@@ -27,15 +27,27 @@ describe('prompt builder', () => {
     expect(prompt).toContain('Manchester City');
     expect(prompt).toContain('club crest');
     expect(prompt).toContain('sponsor logos');
-    expect(prompt).toContain('celebrating immediately after scoring');
+    expect(prompt).toContain('captured moments after scoring');
     expect(prompt).not.toContain('without logos');
     expect(prompt).not.toContain('No club crests');
     expect(prompt).not.toContain('1 – 0');
   });
 
-  it('has teammates joining the celebration on a goal', () => {
+  it('frames the goal as a tight close-up on a single hero subject', () => {
     const prompt = buildEventImagePrompt(base);
-    expect(prompt).toContain('join the celebration');
+    expect(prompt).toContain('chest-up framing');
+    expect(prompt).toContain('single clear hero of the frame');
+  });
+
+  it('picks a pose deterministically, and varies it across different events', () => {
+    const first = buildEventImagePrompt(base);
+    const again = buildEventImagePrompt(base);
+    expect(first).toBe(again);
+
+    const poses = new Set(
+      Array.from({ length: 8 }, (_, i) => buildEventImagePrompt({ ...base, minute: i + 1 })),
+    );
+    expect(poses.size).toBeGreaterThan(1);
   });
 
   it('falls back to generic wording when the player is missing', () => {
@@ -141,11 +153,28 @@ describe('prompt builder', () => {
     expect(narrow).toContain('narrowly decided');
   });
 
-  it('shows both crests and no players, leaving the scoreline to the deterministic overlay', () => {
+  it('shows both crests and no players, and asks the model to render the scoreline itself', () => {
     const prompt = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 2 }, away: { ...base.away, score: 1 } });
     expect(prompt).toContain('#6CADDF');
-    expect(prompt).toContain('deterministic overlay');
+    expect(prompt).toContain('"2"');
+    expect(prompt).toContain('"1"');
     expect(prompt).not.toContain('celebrating');
     expect(prompt).not.toContain('"2 - 1"');
+  });
+
+  it('asks the model to render the scoreboard and player caption directly', () => {
+    const prompt = buildEventImagePrompt(base);
+    expect(prompt).toContain('"MANCHESTER CITY"');
+    expect(prompt).toContain('"ARSENAL"');
+    expect(prompt).toContain('"1"');
+    expect(prompt).toContain('"0"');
+    expect(prompt).toContain('"GOAL"');
+    expect(prompt).toContain('"ERLING HAALAND"');
+    expect(prompt).toContain("\"12'\"");
+  });
+
+  it('omits the player caption instructions for full-time, even if a player happens to be set', () => {
+    const prompt = buildEventImagePrompt({ ...base, type: 'FULL_TIME' });
+    expect(prompt).not.toContain('ERLING HAALAND');
   });
 });
