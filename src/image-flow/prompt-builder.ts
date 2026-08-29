@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v8';
+export const IMAGE_PROMPT_VERSION = 'prompt-v9';
 
 const SHARED_CONSTRAINTS = `
 No scoreboard, watermark, duplicate people, distorted limbs or extra fingers.
@@ -16,12 +16,12 @@ deterministic scoreboard bar and caption can be composited afterward.
 `.trim();
 
 const CAMERA_STYLE = `
-Tight, cinematic close-up framed from the chest up, shot like a modern
-official football club account hero image: long telephoto lens, shallow
-depth of field, the packed floodlit stadium reduced to soft glowing bokeh
-behind the subject. Punchy contemporary sports colour grade, deep contrast,
-cool shadow tones, warm accurate skin tones, crisp tack-sharp subject
-detail, freeze-frame sports photography.
+Vertical portrait orientation. Tight, cinematic close-up framed from the
+chest up, shot like a modern official football club account hero image:
+long telephoto lens, shallow depth of field, the packed floodlit stadium
+reduced to soft glowing bokeh behind the subject. Punchy contemporary sports
+colour grade, deep contrast, cool shadow tones, warm accurate skin tones,
+crisp tack-sharp subject detail, freeze-frame sports photography.
 `.trim();
 
 /**
@@ -234,12 +234,13 @@ ${SHARED_CONSTRAINTS}
             ? 'A dominant, one-sided final scoreline.'
             : 'A close result, narrowly decided.';
       return `
-Full-time result graphic, no players, no people, no photographs of humans.
-Clean, modern, cinematic sports broadcast graphic style: the
-${crestLineFor(event.home)} on the left facing the ${crestLineFor(event.away)}
-on the right, separated by a bold abstract divider, set against a subtly
-blurred, floodlit stadium backdrop with punchy contemporary colour grading.
-Balanced, centered composition with clear space around each crest.
+Vertical portrait orientation. Full-time result graphic, no players, no people,
+no photographs of humans. Clean, modern, cinematic sports broadcast graphic
+style: the ${crestLineFor(event.home)} on the left facing the
+${crestLineFor(event.away)} on the right, separated by a bold abstract
+divider, set against a subtly blurred, floodlit stadium backdrop with punchy
+contemporary colour grading. Balanced, centered composition with clear space
+around each crest.
 
 ${moodLine}
 

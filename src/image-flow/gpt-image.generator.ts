@@ -47,8 +47,8 @@ function isRetryable(error: unknown): boolean {
 }
 
 /**
- * Generates one landscape editorial JPEG for a confirmed event (plan section
- * 9): low quality, 1536x1024, JPEG at the configured compression, hard
+ * Generates one portrait editorial JPEG for a confirmed event (plan section
+ * 9): low quality, 1024x1536, JPEG at the configured compression, hard
  * product deadline, at most one retry with short jitter when a 429/5xx leaves
  * enough deadline remaining.
  */
@@ -71,7 +71,7 @@ export async function generateEventArtwork(prompt: string): Promise<GeneratedArt
           model: env.OPENAI_IMAGE_MODEL,
           prompt,
           quality: 'low',
-          size: '1536x1024',
+          size: '1024x1536',
           output_format: 'jpeg',
           output_compression: env.IMAGE_OUTPUT_COMPRESSION,
           n: 1,

@@ -43,7 +43,7 @@ const EnvSchema = z.object({
     z.string().min(1).optional(),
   ),
   REPLICATE_IMAGE_MODEL: z.string().min(1).default("xai/grok-imagine-image"),
-  REPLICATE_IMAGE_ASPECT_RATIO: z.string().min(1).default("3:2"),
+  REPLICATE_IMAGE_ASPECT_RATIO: z.string().min(1).default("2:3"),
   REPLICATE_IMAGE_RESOLUTION: z.preprocess(
     (value) => (value === "" || value === undefined ? undefined : value),
     z.enum(["1k", "2k"]).optional(),

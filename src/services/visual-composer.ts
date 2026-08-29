@@ -5,9 +5,9 @@ import type { MatchEvent } from '../domain/match-event.js';
 import { ImageFlowError } from '../image-flow/errors.js';
 import { logger } from '../observability/logger.js';
 
-/** GPT Image 2 landscape canvas (plan section 2). */
-export const IMAGE_WIDTH = 1536;
-export const IMAGE_HEIGHT = 1024;
+/** GPT Image 2 portrait canvas. */
+export const IMAGE_WIDTH = 1024;
+export const IMAGE_HEIGHT = 1536;
 
 const EVENT_LABELS: Record<MatchEvent['type'], string> = {
   GOAL: 'GOAL',
@@ -19,7 +19,7 @@ const EVENT_LABELS: Record<MatchEvent['type'], string> = {
 };
 
 const TOP_BAR_HEIGHT = 190;
-const BAR_PADDING = 56;
+const BAR_PADDING = 44;
 
 export function escapeXml(text: string): string {
   return text
@@ -51,27 +51,27 @@ function scoreboardSvg(event: MatchEvent): string {
   const away = escapeXml(truncateLabel(event.away.name, 22));
   const nameY = 74;
   const scoreY = 152;
-  const pillWidth = Math.max(180, label.length * 17 + 64);
+  const pillWidth = Math.max(160, label.length * 15 + 56);
   const pillX = (IMAGE_WIDTH - pillWidth) / 2;
-  const pillY = (TOP_BAR_HEIGHT - 56) / 2;
+  const pillY = (TOP_BAR_HEIGHT - 52) / 2;
 
   return `
   <rect x="0" y="0" width="${IMAGE_WIDTH}" height="${TOP_BAR_HEIGHT}" fill="#0a1526" fill-opacity="0.93"/>
-  <text x="${BAR_PADDING}" y="${nameY}" font-family="Arial, Helvetica, sans-serif" font-size="28"
+  <text x="${BAR_PADDING}" y="${nameY}" font-family="Arial, Helvetica, sans-serif" font-size="24"
         font-weight="700" fill="#c9d3e0" letter-spacing="1">${home}</text>
-  <text x="${BAR_PADDING}" y="${scoreY}" font-family="Arial Black, Helvetica, sans-serif" font-size="64"
+  <text x="${BAR_PADDING}" y="${scoreY}" font-family="Arial Black, Helvetica, sans-serif" font-size="60"
         font-weight="900" fill="#ffffff">${event.home.score}</text>
   <text x="${IMAGE_WIDTH - BAR_PADDING}" y="${nameY}" text-anchor="end"
-        font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#c9d3e0"
+        font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#c9d3e0"
         letter-spacing="1">${away}</text>
   <text x="${IMAGE_WIDTH - BAR_PADDING}" y="${scoreY}" text-anchor="end"
-        font-family="Arial Black, Helvetica, sans-serif" font-size="64" font-weight="900"
+        font-family="Arial Black, Helvetica, sans-serif" font-size="60" font-weight="900"
         fill="#ffffff">${event.away.score}</text>
-  <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="56" rx="28" fill="#ffffff"
+  <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="52" rx="26" fill="#ffffff"
         fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1.5"/>
-  <text x="${IMAGE_WIDTH / 2}" y="${pillY + 37}" text-anchor="middle"
-        font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800" fill="#ffffff"
-        letter-spacing="3">${label}</text>
+  <text x="${IMAGE_WIDTH / 2}" y="${pillY + 34}" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="800" fill="#ffffff"
+        letter-spacing="2">${label}</text>
 `;
 }
 

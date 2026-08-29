@@ -18,7 +18,7 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v8');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v9');
   });
 
   it('uses the player name and authentic kit branding for a goal', () => {
