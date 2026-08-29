@@ -51,9 +51,10 @@ function scoreboardSvg(event: MatchEvent): string {
   const away = escapeXml(truncateLabel(event.away.name, 22));
   const nameY = 74;
   const scoreY = 152;
-  const pillWidth = Math.max(160, label.length * 15 + 56);
+  const pillWidth = Math.max(200, label.length * 21 + 64);
+  const pillHeight = 62;
   const pillX = (IMAGE_WIDTH - pillWidth) / 2;
-  const pillY = (TOP_BAR_HEIGHT - 52) / 2;
+  const pillY = (TOP_BAR_HEIGHT - pillHeight) / 2;
 
   return `
   <rect x="0" y="0" width="${IMAGE_WIDTH}" height="${TOP_BAR_HEIGHT}" fill="#0a1526" fill-opacity="0.93"/>
@@ -67,10 +68,10 @@ function scoreboardSvg(event: MatchEvent): string {
   <text x="${IMAGE_WIDTH - BAR_PADDING}" y="${scoreY}" text-anchor="end"
         font-family="Arial Black, Helvetica, sans-serif" font-size="60" font-weight="900"
         fill="#ffffff">${event.away.score}</text>
-  <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="52" rx="26" fill="#ffffff"
+  <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="${pillHeight}" rx="31" fill="#ffffff"
         fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1.5"/>
-  <text x="${IMAGE_WIDTH / 2}" y="${pillY + 34}" text-anchor="middle"
-        font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="800" fill="#ffffff"
+  <text x="${IMAGE_WIDTH / 2}" y="${pillY + pillHeight / 2 + 12}" text-anchor="middle"
+        font-family="Arial Black, Helvetica, sans-serif" font-size="30" font-weight="900" fill="#ffffff"
         letter-spacing="2">${label}</text>
 `;
 }
