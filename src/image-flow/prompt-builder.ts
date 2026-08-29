@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v9';
+export const IMAGE_PROMPT_VERSION = 'prompt-v10';
 
 const SHARED_CONSTRAINTS = `
 No scoreboard, watermark, duplicate people, distorted limbs or extra fingers.
@@ -23,6 +23,67 @@ reduced to soft glowing bokeh behind the subject. Punchy contemporary sports
 colour grade, deep contrast, cool shadow tones, warm accurate skin tones,
 crisp tack-sharp subject detail, freeze-frame sports photography.
 `.trim();
+
+/**
+ * Pose banks so repeated events don't all render the same frozen gesture.
+ * Selection is deterministic per event (see seedFor/pick below), not random
+ * per call, so an idempotent re-composite of the same event never drifts.
+ */
+const GOAL_POSES = [
+  'roaring with a clenched fist driven upward, chin lifted, eyes blazing with triumph',
+  'sprinting mid-stride with both arms flung wide, mouth open in a joyous shout',
+  'dropping to one knee, fists pulled down hard, head thrown back in release',
+  'cupping a hand to an ear, staring into the crowd with a fierce, taunting grin',
+  'leaping with both fists punching skyward, shirt rippling mid-jump',
+  'sliding on both knees, arms spread wide, pure elation across the face',
+  'pointing decisively toward the crowd, jaw clenched, eyes locked and intense',
+  'beating both fists against the chest, a guttural roar of release',
+] as const;
+
+const OWN_GOAL_POSES = [
+  'hands clamped over the face, shoulders hunched in disbelief',
+  'both hands gripping the back of the head, mouth open in a silent groan',
+  'bent forward with hands on knees, staring blankly at the turf',
+  'turning away sharply, one arm thrown up in frustration',
+  'crouched low, forearms pressed against the eyes, utterly crestfallen',
+] as const;
+
+const RED_CARD_POSES = [
+  'head bowed, hands pressed to the top of the head in disbelief',
+  'arms spread wide in protest, mouth open mid-argument',
+  'walking away with shoulders slumped, staring at the ground',
+  'hands gripping the jersey collar, eyes wide with shock',
+  'turning away with one hand raised as if pleading the decision',
+] as const;
+
+const PENALTY_MISSED_POSES = [
+  'both hands clutching the top of the head, eyes squeezed shut',
+  'bent double, hands on knees, staring in disbelief at the goal',
+  'dropping to both knees, fists pressed against the forehead',
+  'turning away sharply with one arm thrown over the face',
+  'standing frozen, hands open at the sides, shoulders sagging',
+] as const;
+
+/** Stable per-event hash so the same event always picks the same pose. */
+function seedFor(event: MatchEvent): number {
+  const raw = [
+    event.matchId,
+    event.incidentId ?? '',
+    event.type,
+    event.minute,
+    event.stoppageMinute ?? '',
+    event.player?.name ?? '',
+  ].join(':');
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash * 31 + raw.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function pick<T>(items: readonly T[], seed: number): T {
+  return items[seed % items.length] as T;
+}
 
 /**
  * The normalized event does not attribute the player to a side, so the kit
@@ -150,14 +211,14 @@ export function buildEventImagePrompt(event: MatchEvent): string {
   const momentLine = momentLineFor(event);
 
   switch (event.type) {
-    case 'GOAL':
+    case 'GOAL': {
+      const pose = pick(GOAL_POSES, seedFor(event));
       return `
-Photorealistic close-up sports photograph of ${player}
-mid-celebration immediately after scoring, chest-up framing, raw unfiltered
-emotion on the face — roar, clenched fist, or head thrown back — authentic
-athletic posture, balanced natural anatomy, realistic hands and face, sweat
-and fabric detail. A teammate may be softly out of focus in the far
-background, but ${player} is the single clear hero of the frame.
+Photorealistic close-up sports photograph of ${player}, chest-up framing,
+captured moments after scoring: ${pose}. Authentic athletic posture,
+balanced natural anatomy, realistic hands and face, sweat and fabric detail.
+A teammate may be softly out of focus in the far background, but ${player}
+is the single clear hero of the frame.
 
 ${momentLine}${assistLineFor(event)}${goalContextLineFor(event)}
 
@@ -165,15 +226,17 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 `.trim();
+    }
 
-    case 'OWN_GOAL':
+    case 'OWN_GOAL': {
+      const pose = pick(OWN_GOAL_POSES, seedFor(event));
       return `
-Photorealistic close-up sports photograph of ${player}
-reacting with anguish and disbelief moments after an own goal, chest-up
-framing, hands on head or covering the face, authentic athletic posture,
-balanced natural anatomy, realistic hands and face, raw emotion, sweat and
-fabric detail. An opponent may be softly out of focus in the far background,
-showing restrained, sportsmanlike celebration rather than mockery.
+Photorealistic close-up sports photograph of ${player}, chest-up framing,
+reacting with anguish and disbelief moments after an own goal: ${pose}.
+Authentic athletic posture, balanced natural anatomy, realistic hands and
+face, raw emotion, sweat and fabric detail. An opponent may be softly out of
+focus in the far background, showing restrained, sportsmanlike celebration
+rather than mockery.
 
 ${momentLine}${goalContextLineFor(event)}
 
@@ -181,14 +244,15 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 `.trim();
+    }
 
-    case 'RED_CARD':
+    case 'RED_CARD': {
+      const pose = pick(RED_CARD_POSES, seedFor(event));
       return `
-Photorealistic close-up sports photograph of ${player}
-reacting with disbelief moments after a sending-off, chest-up framing, head
-bowed or hands on head, authentic athletic posture, balanced natural
-anatomy, realistic hands and face, raw emotion, sweat and fabric detail. The
-referee is out of frame.
+Photorealistic close-up sports photograph of ${player}, chest-up framing,
+reacting with disbelief moments after a sending-off: ${pose}. Authentic
+athletic posture, balanced natural anatomy, realistic hands and face, raw
+emotion, sweat and fabric detail. The referee is out of frame.
 
 ${momentLine}
 
@@ -196,13 +260,15 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 `.trim();
+    }
 
-    case 'PENALTY_MISSED':
+    case 'PENALTY_MISSED': {
+      const pose = pick(PENALTY_MISSED_POSES, seedFor(event));
       return `
-Photorealistic close-up sports photograph of ${player}
-in the instant of anguish after a missed penalty, chest-up framing, hands
-rising toward the face, authentic athletic posture, balanced natural
-anatomy, realistic hands and face, visible despair, sweat and fabric detail.
+Photorealistic close-up sports photograph of ${player}, chest-up framing, in
+the instant of anguish after a missed penalty: ${pose}. Authentic athletic
+posture, balanced natural anatomy, realistic hands and face, visible
+despair, sweat and fabric detail.
 
 ${momentLine}
 
@@ -210,6 +276,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 `.trim();
+    }
 
     case 'VAR':
       return `

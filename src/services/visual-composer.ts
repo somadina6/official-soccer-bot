@@ -82,8 +82,8 @@ function captionSvg(event: MatchEvent): string {
   const minute = event.stoppageMinute
     ? `${event.minute}+${event.stoppageMinute}'`
     : `${event.minute}'`;
-  const player = escapeXml(truncateLabel(event.player.name, 42));
-  const fadeTop = IMAGE_HEIGHT - 260;
+  const player = escapeXml(truncateLabel(event.player.name, 24).toUpperCase());
+  const fadeTop = IMAGE_HEIGHT - 300;
 
   return `
   <defs>
@@ -92,9 +92,9 @@ function captionSvg(event: MatchEvent): string {
       <stop offset="100%" stop-color="#000" stop-opacity="0.85"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="${fadeTop}" width="${IMAGE_WIDTH}" height="260" fill="url(#fade)"/>
-  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 128}" font-family="Arial, Helvetica, sans-serif" font-size="52"
-        font-weight="800" fill="#ffffff">${player}</text>
+  <rect x="0" y="${fadeTop}" width="${IMAGE_WIDTH}" height="300" fill="url(#fade)"/>
+  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 128}" font-family="Arial Black, Helvetica, sans-serif" font-size="72"
+        font-weight="900" fill="#ffffff" letter-spacing="1">${player}</text>
   <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 68}" font-family="Arial, Helvetica, sans-serif" font-size="34"
         font-weight="600" fill="#e3e8ef">${minute}</text>
 `;
