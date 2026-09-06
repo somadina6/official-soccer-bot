@@ -49,7 +49,8 @@ export const SITUATION_GUIDANCE: Record<CommentarySituation, string> = {
   penalty_saved: 'Make the goalkeeper the hero rather than humiliating the taker. Prefer the keeper\'s name when it is in the context dictionary.',
   penalty_missed: 'The chance is gone. Do not pile onto the taker; keep it about the miss and the match state.',
   var_overturn: 'Be clear before being funny. Lead with the reversed decision, then the score, then one dry line.',
-  full_time: 'Summarize the match\'s story. A question is allowed only if the assigned style is question.',
+  full_time:
+    'Summarize the match\'s story, then always close with one engaging discussion question for readers — for example, asking who was their Man of the Match. Every full-time post must end with a question.',
 };
 
 /** Goals (including equalizers and late winners) still have to name the scorer. */

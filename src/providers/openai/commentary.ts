@@ -157,7 +157,7 @@ export function commentaryPolicy(
     "- Normally use no more than two exclamation marks per candidate.",
     "- No URLs, hashtags or unsolicited @mentions.",
     "- Use plain player and team names.",
-    "- Do not ask questions unless the assigned style is question and the situation is full time.",
+    "- Do not ask questions outside of full time. At full time, every candidate must end with one engaging discussion question, such as asking who was Man of the Match.",
     "- Use short sentences with natural rhythm.",
     `- Never use these clichés: ${BANNED_CLICHE_PROMPT}.`,
     "- Candidates must differ in both hook and punchline, not merely substitute synonyms.",
@@ -351,7 +351,7 @@ function fallbackCandidate(
       return {
         hook: "THAT IS THE WHISTLE.",
         factLine: score,
-        punchline: "No more arguments. The result is locked in.",
+        punchline: "Who's been your Man of the Match?",
       };
 
     case "goal":

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { MatchEvent } from '../domain/match-event.js';
 import { logger } from '../observability/logger.js';
+import { loadFullTimeScorers } from '../services/scorers.js';
 import { composeEventImage } from '../services/visual-composer.js';
 import { storeArtwork } from '../supabase/storage.js';
 import { errorCodeOf, sanitizedErrorMessage } from './errors.js';
@@ -67,7 +68,9 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
     await validateGenerated(generated.image);
 
     await updateImageJob(job.id, { status: 'compositing' });
-    finalJpeg = await composeEventImage(generated.image, event, { overlay: false });
+    const scorers =
+      event.type === 'FULL_TIME' ? await loadFullTimeScorers(fixtureId) : undefined;
+    finalJpeg = await composeEventImage(generated.image, event, { overlay: false, scorers });
     finalJpeg = await enforceXLimit(finalJpeg);
   } catch (error) {
     const lastErrorCode = errorCodeOf(error);
