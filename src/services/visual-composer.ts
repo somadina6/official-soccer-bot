@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { INTER_BOLD_WOFF2_BASE64 } from '../assets/fonts/inter-bold-woff2-base64.js';
 import type { MatchEvent } from '../domain/match-event.js';
 import { ImageFlowError } from '../image-flow/errors.js';
 import { logger } from '../observability/logger.js';
@@ -8,6 +9,28 @@ import { logger } from '../observability/logger.js';
 /** GPT Image 2 portrait canvas. */
 export const IMAGE_WIDTH = 1024;
 export const IMAGE_HEIGHT = 1536;
+
+const OVERLAY_FONT_FAMILY = 'MatchMouthOverlay';
+
+/**
+ * Embeds the overlay font directly in the SVG as base64, instead of
+ * referencing a system font by name (e.g. "Arial"). The container this runs
+ * in (Railway) has no fonts installed, which made every code-drawn overlay
+ * text — the full-time scorers list, and previously the scoreboard/caption
+ * overlay — render as blank tofu boxes in production even though it looked
+ * fine on a dev machine that happens to have system fonts.
+ */
+const OVERLAY_FONT_FACE_SVG = `
+  <defs>
+    <style>
+      @font-face {
+        font-family: '${OVERLAY_FONT_FAMILY}';
+        src: url(data:font/woff2;base64,${INTER_BOLD_WOFF2_BASE64}) format('woff2');
+        font-weight: 700;
+      }
+    </style>
+  </defs>
+`;
 
 const EVENT_LABELS: Record<MatchEvent['type'], string> = {
   GOAL: 'GOAL',
@@ -58,20 +81,20 @@ function scoreboardSvg(event: MatchEvent): string {
 
   return `
   <rect x="0" y="0" width="${IMAGE_WIDTH}" height="${TOP_BAR_HEIGHT}" fill="#0a1526" fill-opacity="0.93"/>
-  <text x="${BAR_PADDING}" y="${nameY}" font-family="Arial, Helvetica, sans-serif" font-size="24"
+  <text x="${BAR_PADDING}" y="${nameY}" font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="24"
         font-weight="700" fill="#c9d3e0" letter-spacing="1">${home}</text>
-  <text x="${BAR_PADDING}" y="${scoreY}" font-family="Arial Black, Helvetica, sans-serif" font-size="60"
+  <text x="${BAR_PADDING}" y="${scoreY}" font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="60"
         font-weight="900" fill="#ffffff">${event.home.score}</text>
   <text x="${IMAGE_WIDTH - BAR_PADDING}" y="${nameY}" text-anchor="end"
-        font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#c9d3e0"
+        font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="24" font-weight="700" fill="#c9d3e0"
         letter-spacing="1">${away}</text>
   <text x="${IMAGE_WIDTH - BAR_PADDING}" y="${scoreY}" text-anchor="end"
-        font-family="Arial Black, Helvetica, sans-serif" font-size="60" font-weight="900"
+        font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="60" font-weight="900"
         fill="#ffffff">${event.away.score}</text>
   <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="${pillHeight}" rx="31" fill="#ffffff"
         fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1.5"/>
   <text x="${IMAGE_WIDTH / 2}" y="${pillY + pillHeight / 2 + 12}" text-anchor="middle"
-        font-family="Arial Black, Helvetica, sans-serif" font-size="30" font-weight="900" fill="#ffffff"
+        font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="30" font-weight="900" fill="#ffffff"
         letter-spacing="2">${label}</text>
 `;
 }
@@ -93,9 +116,9 @@ function captionSvg(event: MatchEvent): string {
     </linearGradient>
   </defs>
   <rect x="0" y="${fadeTop}" width="${IMAGE_WIDTH}" height="300" fill="url(#fade)"/>
-  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 128}" font-family="Arial Black, Helvetica, sans-serif" font-size="72"
+  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 128}" font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="72"
         font-weight="900" fill="#ffffff" letter-spacing="1">${player}</text>
-  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 68}" font-family="Arial, Helvetica, sans-serif" font-size="34"
+  <text x="${BAR_PADDING}" y="${IMAGE_HEIGHT - 68}" font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="34"
         font-weight="600" fill="#e3e8ef">${minute}</text>
 `;
 }
@@ -126,7 +149,7 @@ function scorersColumnSvg(entries: readonly FullTimeScorer[], side: 'home' | 'aw
   return column
     .map((entry, index) => {
       const y = SCORERS_TOP + index * SCORERS_ROW_HEIGHT;
-      return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#f4f6fa">${escapeXml(scorerLabel(entry))}</text>`;
+      return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="26" font-weight="700" fill="#f4f6fa">${escapeXml(scorerLabel(entry))}</text>`;
     })
     .join('\n');
 }
@@ -176,6 +199,7 @@ export async function composeEventImage(
   const svgFragments: string[] = [];
   if (overlay) svgFragments.push(scoreboardSvg(event), captionSvg(event));
   if (options.scorers?.length) svgFragments.push(scorersSvg(options.scorers));
+  if (svgFragments.length > 0) svgFragments.unshift(OVERLAY_FONT_FACE_SVG);
 
   try {
     let pipeline = sharp(background)
