@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v11';
+export const IMAGE_PROMPT_VERSION = 'prompt-v12';
 
 const SHARED_CONSTRAINTS = `
 No duplicate people, distorted limbs, or extra fingers. Kit branding (club
@@ -174,12 +174,21 @@ function crestLineFor(side: MatchEvent['home']): string {
   return `${side.name} club crest${coloursLineFor(side)}`;
 }
 
-/** Full-time is a graphic, not a photo, but now also model-rendered — see scoreboardInstructionsFor. */
+/**
+ * Full-time is a graphic, not a photo, but now also model-rendered — see
+ * scoreboardInstructionsFor. The band directly below the top bar is reserved
+ * for a code-drawn scorers list (visual-composer.ts scorersSvg), composited
+ * on afterward, so the model must keep that region visually calm.
+ */
 const FULL_TIME_CONSTRAINTS = `
 No players, no people, no photographs of humans in the backdrop art. Crests
 must not be duplicated, invented beyond the two named clubs, or distorted.
 No watermark, and no stray or invented text anywhere in the image beyond
-what is specified below.
+what is specified below. Leave the band directly beneath the top scoreboard
+bar, roughly the next quarter of the frame, visually calm and uncluttered —
+no crests, text, or important detail placed there — since a scorers list is
+composited over that region afterward. Keep the two crests and the main
+composition centered in the lower two-thirds of the frame.
 `.trim();
 
 function subjectFor(event: MatchEvent): string {

@@ -100,16 +100,56 @@ function captionSvg(event: MatchEvent): string {
 `;
 }
 
+/** One confirmed goal, ready to be drawn on the full-time scorers list. */
+export type FullTimeScorer = {
+  name: string;
+  minute: number;
+  stoppageMinute?: number | undefined;
+  side: 'home' | 'away';
+  ownGoal: boolean;
+};
+
+const SCORERS_TOP = TOP_BAR_HEIGHT + 34;
+const SCORERS_ROW_HEIGHT = 34;
+
+function scorerLabel(entry: FullTimeScorer): string {
+  const minute = entry.stoppageMinute ? `${entry.minute}+${entry.stoppageMinute}'` : `${entry.minute}'`;
+  const name = escapeXml(truncateLabel(entry.name, 22));
+  const suffix = entry.ownGoal ? ' (OG)' : '';
+  return `${minute}  ${name}${suffix}`;
+}
+
+function scorersColumnSvg(entries: readonly FullTimeScorer[], side: 'home' | 'away'): string {
+  const column = entries.filter(entry => entry.side === side);
+  const anchor = side === 'home' ? 'start' : 'end';
+  const x = side === 'home' ? BAR_PADDING : IMAGE_WIDTH - BAR_PADDING;
+  return column
+    .map((entry, index) => {
+      const y = SCORERS_TOP + index * SCORERS_ROW_HEIGHT;
+      return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#f4f6fa">${escapeXml(scorerLabel(entry))}</text>`;
+    })
+    .join('\n');
+}
+
 /**
- * Deterministic overlay (plan section 10): the image model paints the
- * scene, but every factual element — event label, player, minute, score,
- * team names — is rendered by code so it is always exactly right.
+ * Full-time scorers list: minute + name per side, code-rendered directly
+ * beneath the model-rendered top bar so every name is spelled exactly right
+ * (the AI image prompt reserves this band — see FULL_TIME_CONSTRAINTS in
+ * prompt-builder.ts). Skipped entirely when there are no known scorers.
  */
-function overlaySvg(event: MatchEvent): string {
-  return `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-  ${scoreboardSvg(event)}
-  ${captionSvg(event)}
-</svg>`;
+function scorersSvg(entries: readonly FullTimeScorer[]): string {
+  if (entries.length === 0) return '';
+  const rows = Math.max(
+    entries.filter(entry => entry.side === 'home').length,
+    entries.filter(entry => entry.side === 'away').length,
+  );
+  const backdropHeight = SCORERS_TOP - TOP_BAR_HEIGHT + rows * SCORERS_ROW_HEIGHT + 16;
+
+  return `
+  <rect x="0" y="${TOP_BAR_HEIGHT}" width="${IMAGE_WIDTH}" height="${backdropHeight}" fill="#0a1526" fill-opacity="0.72"/>
+  ${scorersColumnSvg(entries, 'home')}
+  ${scorersColumnSvg(entries, 'away')}
+`;
 }
 
 export type ComposeEventImageOptions = {
@@ -122,6 +162,8 @@ export type ComposeEventImageOptions = {
    * (post-corrections.ts), which still needs code to draw every fact.
    */
   overlay?: boolean;
+  /** Full-time only: confirmed scorers to list beneath the top bar, in code-rendered text. */
+  scorers?: readonly FullTimeScorer[] | undefined;
 };
 
 /** Composes the final 1024×1536 JPEG from generated (or fallback) artwork, optionally plus the overlay. */
@@ -131,12 +173,19 @@ export async function composeEventImage(
   options: ComposeEventImageOptions = {},
 ): Promise<Buffer> {
   const overlay = options.overlay ?? true;
+  const svgFragments: string[] = [];
+  if (overlay) svgFragments.push(scoreboardSvg(event), captionSvg(event));
+  if (options.scorers?.length) svgFragments.push(scorersSvg(options.scorers));
+
   try {
     let pipeline = sharp(background)
       .rotate()
       .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' });
-    if (overlay) {
-      pipeline = pipeline.composite([{ input: Buffer.from(overlaySvg(event)), top: 0, left: 0 }]);
+    if (svgFragments.length > 0) {
+      const svg = `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  ${svgFragments.join('\n')}
+</svg>`;
+      pipeline = pipeline.composite([{ input: Buffer.from(svg), top: 0, left: 0 }]);
     }
     const image = await pipeline
       .jpeg({ quality: 85, progressive: true, chromaSubsampling: '4:4:4' })
