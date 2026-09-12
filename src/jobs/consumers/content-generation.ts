@@ -135,13 +135,13 @@ export function startContentGenerationConsumer(): () => void {
               seasonId,
             );
             const seasonFacts = extractApprovedSeasonFacts(stats);
-            logger.debug(
+            logger.info(
               { matchEventId, seasonId, stats, seasonFacts },
               "season stats fetched",
             );
             contextDictionary.push(...seasonFacts);
           } else {
-            logger.debug(
+            logger.info(
               { matchEventId, competitionId: row.event.competitionId },
               "season id could not be resolved; skipping season stats",
             );
