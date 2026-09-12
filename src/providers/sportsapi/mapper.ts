@@ -373,3 +373,102 @@ export function extractApprovedIncidentFacts(raw: unknown): string[] {
 
   return [...new Set(facts)];
 }
+
+// ── Season statistics ──────────────────────────────────────────────────────
+
+const SeasonEntrySchema = z
+  .object({
+    id: z.union([z.number(), z.string()]),
+    year: z.union([z.number(), z.string()]).optional(),
+    tournament: z.object({ id: z.union([z.number(), z.string()]) }).passthrough().optional(),
+    uniqueTournament: z.object({ id: z.union([z.number(), z.string()]) }).passthrough().optional(),
+  })
+  .passthrough();
+
+const SeasonListSchema = z.array(SeasonEntrySchema);
+const SeasonsDataEnvelopeSchema = z.object({ data: SeasonListSchema }).passthrough();
+const SeasonsSeasonsEnvelopeSchema = z.object({ seasons: SeasonListSchema }).passthrough();
+
+/**
+ * Picks the season id matching a tournament from a `/statistics/seasons`
+ * payload. Returns undefined (never throws) when the shape doesn't match or
+ * no season lines up with the given tournament.
+ */
+export function resolveSeasonId(raw: unknown, tournamentId: string): string | undefined {
+  const list = SeasonListSchema.safeParse(raw);
+  const dataEnvelope = list.success ? undefined : SeasonsDataEnvelopeSchema.safeParse(raw);
+  const seasonsEnvelope = dataEnvelope?.success
+    ? undefined
+    : SeasonsSeasonsEnvelopeSchema.safeParse(raw);
+
+  const entries = list.success
+    ? list.data
+    : dataEnvelope?.success
+      ? dataEnvelope.data.data
+      : seasonsEnvelope?.success
+        ? seasonsEnvelope.data.seasons
+        : undefined;
+  if (!entries) return undefined;
+
+  const match = entries.find(
+    entry =>
+      String(entry.tournament?.id ?? '') === tournamentId ||
+      String(entry.uniqueTournament?.id ?? '') === tournamentId,
+  );
+  return match ? String(match.id) : undefined;
+}
+
+const SeasonStatisticsSchema = z
+  .object({
+    goals: z.number().optional(),
+    assists: z.number().optional(),
+  })
+  .passthrough();
+
+function unwrapSeasonStatistics(raw: unknown): z.infer<typeof SeasonStatisticsSchema> | undefined {
+  for (const candidate of [
+    raw,
+    (raw as { data?: unknown } | null)?.data,
+    (raw as { statistics?: unknown } | null)?.statistics,
+  ]) {
+    const parsed = SeasonStatisticsSchema.safeParse(candidate);
+    if (parsed.success && (parsed.data.goals !== undefined || parsed.data.assists !== undefined)) {
+      return parsed.data;
+    }
+  }
+  return undefined;
+}
+
+function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/**
+ * Whitelisted, milestone-only facts from a player's season statistics.
+ * Only goal/assist totals are surfaced (as ordinal season counts) — every
+ * other field (shots, passes, cards, rating, ...) is intentionally dropped
+ * to keep this bot's voice from turning into a stat dump.
+ */
+export function extractApprovedSeasonFacts(raw: unknown): string[] {
+  const stats = unwrapSeasonStatistics(raw);
+  if (!stats) return [];
+  const facts: string[] = [];
+  if (stats.goals !== undefined && stats.goals > 0) {
+    facts.push(`${ordinal(stats.goals)} goal of the season`);
+  }
+  if (stats.assists !== undefined && stats.assists > 0) {
+    facts.push(`${ordinal(stats.assists)} assist of the season`);
+  }
+  return facts;
+}

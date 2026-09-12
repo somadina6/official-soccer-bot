@@ -9,7 +9,12 @@ import {
   fallbackTemplate,
   generateCommentary,
 } from "../../providers/openai/commentary.js";
-import { extractApprovedIncidentFacts } from "../../providers/sportsapi/mapper.js";
+import {
+  extractApprovedIncidentFacts,
+  extractApprovedSeasonFacts,
+} from "../../providers/sportsapi/mapper.js";
+import { fetchPlayerSeasonStatistics } from "../../providers/sportsapi/rest-client.js";
+import { getSeasonId } from "../../providers/sportsapi/season-id-cache.js";
 import { rankCandidates } from "../../services/commentary-ranker.js";
 import { classifySituation } from "../../services/commentary-situation.js";
 import { sampleCommentaryStyle } from "../../services/commentary-style.js";
@@ -116,6 +121,39 @@ export function startContentGenerationConsumer(): () => void {
         ...APPROVED_CONTEXT,
         ...extractApprovedIncidentFacts(row.rawPayload),
       ];
+
+      if (row.event.type === "GOAL" && row.event.player?.id) {
+        try {
+          const seasonId = await getSeasonId(
+            row.event.competitionId,
+            row.event.player.id,
+          );
+          if (seasonId) {
+            const stats = await fetchPlayerSeasonStatistics(
+              row.event.player.id,
+              row.event.competitionId,
+              seasonId,
+            );
+            const seasonFacts = extractApprovedSeasonFacts(stats);
+            logger.debug(
+              { matchEventId, seasonId, stats, seasonFacts },
+              "season stats fetched",
+            );
+            contextDictionary.push(...seasonFacts);
+          } else {
+            logger.debug(
+              { matchEventId, competitionId: row.event.competitionId },
+              "season id could not be resolved; skipping season stats",
+            );
+          }
+        } catch (error) {
+          logger.warn(
+            { matchEventId, error },
+            "season stats fetch failed; continuing without it",
+          );
+        }
+      }
+
       const intent: ContentIntent = "live_reaction";
       const situation = classifySituation(row.event, contextDictionary);
       const style = sampleCommentaryStyle(situation, settings.banterTone);

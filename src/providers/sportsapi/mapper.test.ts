@@ -3,12 +3,14 @@ import { buildIdempotencyKey } from '../../domain/match-event.js';
 import {
   canonicalTournamentId,
   extractApprovedIncidentFacts,
+  extractApprovedSeasonFacts,
   extractIncidents,
   extractLiveMatches,
   extractMatchDetails,
   extractScheduledMatches,
   matchInvolvesTeam,
   normalizeIncident,
+  resolveSeasonId,
   shouldWatchMatch,
   teamIdFromUnknown,
   type MatchContext,
@@ -357,5 +359,56 @@ describe('shouldWatchMatch', () => {
     expect(shouldWatchMatch(communityShield, premierLeagueId, watched)).toBe(true);
     expect(matchInvolvesTeam(communityShield, watched)).toBe(true);
     expect(shouldWatchMatch(plMatch, premierLeagueId, watched)).toBe(true);
+  });
+});
+
+describe('resolveSeasonId', () => {
+  it('finds the season id matching the tournament in an array response', () => {
+    const raw = [
+      { id: 41886, tournament: { id: 17 } },
+      { id: 12345, tournament: { id: 346 } },
+    ];
+    expect(resolveSeasonId(raw, '17')).toBe('41886');
+    expect(resolveSeasonId(raw, '346')).toBe('12345');
+    expect(resolveSeasonId(raw, '999')).toBeUndefined();
+  });
+
+  it('finds the season id when wrapped in a data/seasons envelope', () => {
+    expect(resolveSeasonId({ data: [{ id: 1, uniqueTournament: { id: 17 } }] }, '17')).toBe('1');
+    expect(resolveSeasonId({ seasons: [{ id: 2, tournament: { id: 17 } }] }, '17')).toBe('2');
+  });
+
+  it('degrades to undefined on malformed payloads', () => {
+    expect(resolveSeasonId(null, '17')).toBeUndefined();
+    expect(resolveSeasonId({ nonsense: true }, '17')).toBeUndefined();
+    expect(resolveSeasonId('not json', '17')).toBeUndefined();
+  });
+});
+
+describe('extractApprovedSeasonFacts', () => {
+  it('extracts ordinal goal and assist facts from a season statistics payload', () => {
+    expect(extractApprovedSeasonFacts({ goals: 4, assists: 2 })).toEqual([
+      '4th goal of the season',
+      '2nd assist of the season',
+    ]);
+  });
+
+  it('uses the correct ordinal suffix for 1st/3rd/11th', () => {
+    expect(extractApprovedSeasonFacts({ goals: 1 })).toEqual(['1st goal of the season']);
+    expect(extractApprovedSeasonFacts({ goals: 3 })).toEqual(['3rd goal of the season']);
+    expect(extractApprovedSeasonFacts({ goals: 11 })).toEqual(['11th goal of the season']);
+  });
+
+  it('unwraps a nested data/statistics envelope', () => {
+    expect(extractApprovedSeasonFacts({ data: { goals: 5 } })).toEqual(['5th goal of the season']);
+    expect(extractApprovedSeasonFacts({ statistics: { assists: 1 } })).toEqual([
+      '1st assist of the season',
+    ]);
+  });
+
+  it('omits zero counts and degrades to [] on malformed payloads', () => {
+    expect(extractApprovedSeasonFacts({ goals: 0, assists: 0 })).toEqual([]);
+    expect(extractApprovedSeasonFacts(null)).toEqual([]);
+    expect(extractApprovedSeasonFacts({ unrelated: true })).toEqual([]);
   });
 });

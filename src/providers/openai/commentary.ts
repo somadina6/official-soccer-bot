@@ -101,6 +101,7 @@ export function commentaryPolicy(
     '- factLine and punchline are OPTIONAL: leave either as an empty string "" when the moment plays better as one raw line.',
     "- Default to ONE line (hook only). Add a factLine only when the score or minute genuinely earns the extra line.",
     "- For goals, always include a factLine naming the scorer, minute and score — the hook can stay pure reaction, but the post as a whole must never leave out who scored.",
+    "- When the approved context includes a season milestone (e.g. \"3rd goal of the season\"), you may fold it into the hook or factLine — but only when it's a genuine milestone worth mentioning, never forced onto every goal.",
     "  Add a punchline only when there is a genuinely separate joke, not a restatement of the hook.",
     "- Do not pad a post to three lines out of habit — most real fan tweets are one blunt sentence, not a mini-article.",
     "- The published post is the non-empty lines joined by a blank line.",

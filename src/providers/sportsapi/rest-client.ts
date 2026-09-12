@@ -142,3 +142,19 @@ export async function fetchMatch(matchId: string): Promise<unknown> {
 export async function fetchMatchIncidents(matchId: string): Promise<unknown> {
   return sportsGet<unknown>(`/match/${matchId}/incidents`);
 }
+
+/** Season ids with available statistics for a player; used to resolve the current season for a tournament. */
+export async function fetchPlayerStatisticsSeasons(playerId: string): Promise<unknown> {
+  return sportsGet<unknown>(`/players/${playerId}/statistics/seasons`);
+}
+
+/** Aggregated season statistics (goals, assists, appearances, ...) for a player in one tournament/season. */
+export async function fetchPlayerSeasonStatistics(
+  playerId: string,
+  tournamentId: string,
+  seasonId: string,
+): Promise<unknown> {
+  return sportsGet<unknown>(
+    `/players/${playerId}/tournament/${tournamentId}/season/${seasonId}/statistics?type=overall`,
+  );
+}
