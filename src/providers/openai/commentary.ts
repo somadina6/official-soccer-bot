@@ -114,6 +114,7 @@ export function commentaryPolicy(
     "- One or two candidates may use a short ALL-CAPS hook. Never capitalize an entire post.",
     "- Hooks must communicate a reaction, not merely label the event.",
     "- The hook must read as clear, natural banter, not vague filler — a reader should immediately get what happened and why it's being said, even before the factLine.",
+    '- For goals, favour naming the scorer directly in the hook with an active, shouted-sentence structure, e.g. "EMERSON HAS DRAGGED IPSWICH LEVEL!" or "KLUIVERT HAS BLOWN THIS OPEN!" — this beats a vague reaction with no name attached and drives stronger engagement.',
     "- Goals may open with GOOOOAL, GOAL! or a stretched goal spelling — fine as a classic hook, but don't make every candidate use it.",
     "- Each candidate must have a genuinely different hook.",
     "- Never reuse a recent opening supplied by the user.",
