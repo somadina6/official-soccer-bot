@@ -231,6 +231,13 @@ export type MatchContext = {
   competitionId: string;
   home: { id: string; name: string; score: number; colours: string[] };
   away: { id: string; name: string; score: number; colours: string[] };
+  /**
+   * False when the caller could not confidently resolve the current
+   * scoreline (e.g. a DB lookup failure) and `home`/`away` here are only a
+   * best-effort guess. An incident that carries its own homeScore/awayScore
+   * (goals) is always authoritative regardless of this flag.
+   */
+  scoreKnown?: boolean;
 };
 
 const ADDED_TIME_SENTINEL = 999;
@@ -250,8 +257,15 @@ export function normalizeIncident(raw: unknown, context: MatchContext): MatchEve
 
   const home = { ...context.home };
   const away = { ...context.away };
-  if (incident.homeScore !== undefined) home.score = incident.homeScore;
-  if (incident.awayScore !== undefined) away.score = incident.awayScore;
+  let scoreKnown = context.scoreKnown ?? true;
+  if (incident.homeScore !== undefined) {
+    home.score = incident.homeScore;
+    scoreKnown = true;
+  }
+  if (incident.awayScore !== undefined) {
+    away.score = incident.awayScore;
+    scoreKnown = true;
+  }
 
   const minute = Math.max(0, Math.trunc(incident.minute ?? incident.time ?? 0));
   const assist = incident.assist1 ?? incident.assist;
@@ -268,6 +282,7 @@ export function normalizeIncident(raw: unknown, context: MatchContext): MatchEve
     home,
     away,
     rawPayloadHash: hashPayload(canonicalIncidentFingerprint(raw)),
+    scoreKnown,
   };
 
   if (incident.id !== undefined) event.incidentId = String(incident.id);

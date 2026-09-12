@@ -84,6 +84,31 @@ describe('normalizeIncident', () => {
     ).toBeNull();
   });
 
+  it('inherits scoreKnown from context when the incident carries no score', () => {
+    const uncertain = normalizeIncident(
+      { id: 2, incidentType: 'card', incidentClass: 'red', time: 34 },
+      { ...context, scoreKnown: false },
+    );
+    expect(uncertain!.scoreKnown).toBe(false);
+    expect(uncertain!.home.score).toBe(context.home.score);
+
+    const confident = normalizeIncident(
+      { id: 3, incidentType: 'card', incidentClass: 'red', time: 34 },
+      context,
+    );
+    expect(confident!.scoreKnown).toBe(true);
+  });
+
+  it('treats a score reported directly on the incident as authoritative regardless of context', () => {
+    const event = normalizeIncident(
+      { id: 4, incidentType: 'goal', incidentClass: 'regular', time: 67, homeScore: 3, awayScore: 1 },
+      { ...context, scoreKnown: false },
+    );
+    expect(event!.scoreKnown).toBe(true);
+    expect(event!.home.score).toBe(3);
+    expect(event!.away.score).toBe(1);
+  });
+
   it('marks rescinded incidents as OVERTURNED', () => {
     const event = normalizeIncident(
       { id: 555, incidentType: 'goal', incidentClass: 'regular', time: 67, rescinded: true },

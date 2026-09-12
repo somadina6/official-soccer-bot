@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { MatchEvent } from "../domain/match-event.js";
+import { MatchEventSchema, type MatchEvent } from "../domain/match-event.js";
 import { logger } from "../observability/logger.js";
 import {
   extractIncidents,
@@ -75,12 +75,57 @@ async function loadFixture(matchId: string): Promise<FixtureRow | null> {
   return data as FixtureRow | null;
 }
 
-function buildContext(matchId: string, fixture: FixtureRow): MatchContext {
+/**
+ * The fixtures table's home_team/away_team score is only ever written once,
+ * at pre-match sync — it never reflects goals scored since. Only goal
+ * incidents carry their own homeScore/awayScore directly from the provider,
+ * so any other incident (red card, VAR, ...) needs the *current* score
+ * resolved from the last goal we actually ingested, not that stale snapshot.
+ */
+async function resolveCurrentScore(
+  fixture: FixtureRow,
+  fallback: { home: number; away: number },
+): Promise<{ home: number; away: number; known: boolean }> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("match_events")
+      .select("normalized")
+      .eq("fixture_id", fixture.id)
+      .in("event_type", ["GOAL", "OWN_GOAL"])
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (error) throw new Error(error.message);
+
+    for (const row of data ?? []) {
+      const parsed = MatchEventSchema.safeParse(row.normalized);
+      if (parsed.success && parsed.data.status !== "OVERTURNED") {
+        return { home: parsed.data.home.score, away: parsed.data.away.score, known: true };
+      }
+    }
+    // No confirmed goal ingested yet; the pre-match snapshot is legitimately correct.
+    return { ...fallback, known: true };
+  } catch (error) {
+    logger.warn(
+      { fixtureId: fixture.id, error },
+      "failed to resolve current score; commentary will not state a score for this event",
+    );
+    return { ...fallback, known: false };
+  }
+}
+
+async function buildContext(matchId: string, fixture: FixtureRow): Promise<MatchContext> {
+  const home = toTeamSide(fixture.home_team, "Home");
+  const away = toTeamSide(fixture.away_team, "Away");
+  const resolved = await resolveCurrentScore(fixture, { home: home.score, away: away.score });
+  home.score = resolved.home;
+  away.score = resolved.away;
+
   return {
     matchId,
     competitionId: String(fixture.competition_id),
-    home: toTeamSide(fixture.home_team, "Home"),
-    away: toTeamSide(fixture.away_team, "Away"),
+    home,
+    away,
+    scoreKnown: resolved.known,
   };
 }
 
@@ -272,7 +317,7 @@ export async function ingestAndDiff(input: IngestInput): Promise<IngestResult> {
     );
     return { fullTime: false };
   }
-  const context = buildContext(input.matchId, fixture);
+  const context = await buildContext(input.matchId, fixture);
   let fullTime = fixture.status === "finished";
 
   logger.info({ payload: input.payload }, "payload");

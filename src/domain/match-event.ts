@@ -50,6 +50,12 @@ export const MatchEventSchema = z.object({
   player: z.object({ id: z.string().optional(), name: z.string() }).optional(),
   assist: z.object({ id: z.string().optional(), name: z.string() }).optional(),
   rawPayloadHash: z.string(),
+  /**
+   * False when the current scoreline could not be reliably resolved (e.g. a
+   * non-scoring incident whose score context lookup failed). Commentary must
+   * not state or imply a score when this is false.
+   */
+  scoreKnown: z.boolean().optional(),
 });
 
 export type MatchEvent = z.infer<typeof MatchEventSchema>;

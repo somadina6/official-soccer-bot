@@ -237,6 +237,43 @@ describe('validateContent', () => {
   });
 });
 
+describe('validateContent with scoreKnown: false', () => {
+  const redCardEvent: MatchEvent = {
+    provider: 'sportsapi-pro',
+    matchId: '14109842',
+    incidentId: 'inc-2',
+    competitionId: '1',
+    type: 'RED_CARD',
+    status: 'CONFIRMED',
+    minute: 34,
+    occurredAt: '2026-08-15T15:30:00.000Z',
+    home: { id: '1', name: 'Arsenal', score: 0, colours: ['#EF0107'] },
+    away: { id: '2', name: 'Chelsea', score: 0, colours: ['#034694'] },
+    player: { id: '9', name: 'Disasi' },
+    rawPayloadHash: 'def',
+    scoreKnown: false,
+  };
+
+  it('does not require a scoreline to be present', () => {
+    const result = validateContent(
+      { ...validContent, postText: "Disasi sees red for Chelsea on 34 minutes." },
+      redCardEvent,
+      [],
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects a post that states any scoreline', () => {
+    const result = validateContent(
+      { ...validContent, postText: "Disasi sees red for Chelsea on 34 minutes. Still 0–0." },
+      redCardEvent,
+      [],
+    );
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.errors.join()).toContain('must not state a score');
+  });
+});
+
 describe('similarity', () => {
   it('scores identical strings as 1', () => {
     expect(similarity('Saka scores again', 'Saka scores again')).toBe(1);

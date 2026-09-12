@@ -19,6 +19,7 @@ const URL_PATTERN = /https?:\/\/|www\./i;
 const HASHTAG_PATTERN = /#[A-Za-z0-9_]/;
 const MENTION_PATTERN = /(^|[^A-Za-z0-9_])@[A-Za-z0-9_]+/;
 const GENERIC_GOAL_HOOK = /^\s*go+a+l!*\s*$/i;
+const SCORELINE_PATTERN = /\d+\s*[–—:-]\s*\d+/;
 
 const BANNED_SUPERLATIVES = [
   'first ever',
@@ -159,6 +160,8 @@ export function validateContent(
     if (new RegExp(`\\b${word}\\b`, 'i').test(text)) errors.push(`banned cliché: "${word}"`);
   }
 
+  const scoreKnown = event.scoreKnown ?? true;
+
   if (!options.raw) {
     if (event.player && requiresPlayerName(situation) && !lower.includes(event.player.name.toLowerCase())) {
       errors.push(`post must name the player "${event.player.name}"`);
@@ -166,14 +169,19 @@ export function validateContent(
     if (event.type !== 'FULL_TIME' && !text.includes(String(event.minute))) {
       errors.push(`post must contain the minute ${event.minute}`);
     }
-    const scorePattern = new RegExp(`${event.home.score}\\s*[–—:-]\\s*${event.away.score}`);
-    if (!scorePattern.test(text)) {
-      errors.push(`post must contain the score ${event.home.score}-${event.away.score}`);
+    if (scoreKnown) {
+      const scorePattern = new RegExp(`${event.home.score}\\s*[–—:-]\\s*${event.away.score}`);
+      if (!scorePattern.test(text)) {
+        errors.push(`post must contain the score ${event.home.score}-${event.away.score}`);
+      }
     }
+  }
+  if (!scoreKnown && SCORELINE_PATTERN.test(text)) {
+    errors.push('post must not state a score; the current score could not be confirmed for this event');
   }
   const digits = text.match(/\d+/g) ?? [];
   const allowedNumbers = new Set(
-    [event.minute, event.stoppageMinute, event.home.score, event.away.score]
+    [event.minute, event.stoppageMinute, ...(scoreKnown ? [event.home.score, event.away.score] : [])]
       .filter((n): n is number => n !== undefined)
       .map(String),
   );

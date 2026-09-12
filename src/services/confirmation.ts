@@ -34,6 +34,7 @@ export async function confirmEvent(matchEventId: number): Promise<ConfirmationRe
     competitionId: stored.competitionId,
     home: stored.home,
     away: stored.away,
+    ...(stored.scoreKnown !== undefined ? { scoreKnown: stored.scoreKnown } : {}),
   };
 
   for (const raw of extractIncidents(payload)) {

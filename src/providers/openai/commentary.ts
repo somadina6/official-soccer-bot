@@ -101,6 +101,7 @@ export function commentaryPolicy(
     '- factLine and punchline are OPTIONAL: leave either as an empty string "" when the moment plays better as one raw line.',
     "- Default to ONE line (hook only). Add a factLine only when the score or minute genuinely earns the extra line.",
     "- For goals, always include a factLine naming the scorer, minute and score — the hook can stay pure reaction, but the post as a whole must never leave out who scored.",
+    "- The event JSON's scoreKnown field: when it is false, the current score could not be confirmed — do not state, imply or guess any scoreline for this post. React to the event itself (player, minute, situation) without a score.",
     "- When the approved context includes a season milestone (e.g. \"3rd goal of the season\"), you may fold it into the hook or factLine — but only when it's a genuine milestone worth mentioning, never forced onto every goal.",
     "  Add a punchline only when there is a genuinely separate joke, not a restatement of the hook.",
     "- Do not pad a post to three lines out of habit — most real fan tweets are one blunt sentence, not a mini-article.",
@@ -280,7 +281,9 @@ function fallbackCandidate(
   situation: CommentarySituation,
   approvedContext: string[],
 ): CommentaryCandidate {
-  const score = scoreline(event);
+  const scoreKnown = event.scoreKnown ?? true;
+  const score = scoreKnown ? scoreline(event) : undefined;
+  const scoreSuffix = score ? ` ${score}.` : "";
   const player = event.player?.name;
   const minute = minuteLabel(event);
 
@@ -289,8 +292,8 @@ function fallbackCandidate(
       return {
         hook: "WE ARE LEVEL!",
         factLine: player
-          ? `${player} pulls it level at ${minute}. ${score}.`
-          : `Level at ${minute}. ${score}.`,
+          ? `${player} pulls it level at ${minute}.${scoreSuffix}`
+          : `Level at ${minute}.${scoreSuffix}`,
         punchline: "Nobody is sitting comfortably now.",
       };
 
@@ -298,8 +301,8 @@ function fallbackCandidate(
       return {
         hook: "LATE DRAMA!",
         factLine: player
-          ? `${player} strikes at ${minute}. ${score}.`
-          : `Goal at ${minute}. ${score}.`,
+          ? `${player} strikes at ${minute}.${scoreSuffix}`
+          : `Goal at ${minute}.${scoreSuffix}`,
         punchline: "The clock has just become enemy number one.",
       };
 
@@ -307,8 +310,8 @@ function fallbackCandidate(
       return {
         hook: "OH, NO.",
         factLine: player
-          ? `Own goal by ${player} at ${minute}. ${score}.`
-          : `Own goal at ${minute}. ${score}.`,
+          ? `Own goal by ${player} at ${minute}.${scoreSuffix}`
+          : `Own goal at ${minute}.${scoreSuffix}`,
         punchline: "Football has found its cruel side again.",
       };
 
@@ -316,8 +319,8 @@ function fallbackCandidate(
       return {
         hook: "THE MATCH JUST TURNED.",
         factLine: player
-          ? `${player} is sent off at ${minute}. ${score}.`
-          : `Red card at ${minute}. ${score}.`,
+          ? `${player} is sent off at ${minute}.${scoreSuffix}`
+          : `Red card at ${minute}.${scoreSuffix}`,
         punchline: "One card and the tactical plan needs a rewrite.",
       };
 
@@ -327,8 +330,8 @@ function fallbackCandidate(
       return {
         hook: "WHAT A STOP!",
         factLine: keeper
-          ? `${keeper} saves the penalty at ${minute}. ${score}.`
-          : `Penalty saved at ${minute}. ${score}.`,
+          ? `${keeper} saves the penalty at ${minute}.${scoreSuffix}`
+          : `Penalty saved at ${minute}.${scoreSuffix}`,
         punchline: "The goalkeeper wins that duel emphatically.",
       };
     }
@@ -337,24 +340,25 @@ function fallbackCandidate(
       return {
         hook: "THE CHANCE IS GONE.",
         factLine: player
-          ? `${player} misses from the spot at ${minute}. ${score}.`
-          : `Penalty missed at ${minute}. ${score}.`,
+          ? `${player} misses from the spot at ${minute}.${scoreSuffix}`
+          : `Penalty missed at ${minute}.${scoreSuffix}`,
         punchline: "Maximum opportunity. Nothing on the scoreboard.",
       };
 
     case "var_overturn":
       return {
         hook: "SCRATCH THAT.",
-        factLine:
-          `The ${minute} goal is overturned. ` +
-          `It stays ${event.home.score}\u2013${event.away.score}.`,
+        factLine: scoreKnown
+          ? `The ${minute} goal is overturned. ` +
+            `It stays ${event.home.score}\u2013${event.away.score}.`
+          : `The ${minute} goal is overturned.`,
         punchline: "The celebration has been cancelled by VAR.",
       };
 
     case "full_time":
       return {
         hook: "THAT IS THE WHISTLE.",
-        factLine: score,
+        factLine: score ?? "Full time.",
         punchline: "Who's been your Man of the Match?",
       };
 
@@ -363,8 +367,8 @@ function fallbackCandidate(
       return {
         hook: "IN IT GOES!",
         factLine: player
-          ? `${player} scores at ${minute}. ${score}.`
-          : `Goal at ${minute}. ${score}.`,
+          ? `${player} scores at ${minute}.${scoreSuffix}`
+          : `Goal at ${minute}.${scoreSuffix}`,
         punchline: "The net has delivered the only explanation needed.",
       };
   }
@@ -383,8 +387,8 @@ export function fallbackTemplate(
   const candidate = fallbackCandidate(event, situation, approvedContext);
 
   const postText = composePostText(candidate);
-  const score = scoreline(event);
-  const facts = [minuteLabel(event), score];
+  const scoreKnown = event.scoreKnown ?? true;
+  const facts = [minuteLabel(event), ...(scoreKnown ? [scoreline(event)] : [])];
 
   if (event.player?.name) {
     facts.unshift(event.player.name);
