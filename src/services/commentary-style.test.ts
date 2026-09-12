@@ -2,79 +2,60 @@ import { describe, expect, it } from 'vitest';
 import { sampleCommentaryStyle, sampleInfluencerStyle, styleWeights } from './commentary-style.js';
 
 describe('styleWeights', () => {
-  it('uses the playful mix at full time including timeline', () => {
-    expect(styleWeights('full_time', 'playful')).toEqual([
-      { style: 'punchy', weight: 20 },
-      { style: 'playful', weight: 20 },
-      { style: 'dramatic', weight: 10 },
-      { style: 'timeline', weight: 40 },
-      { style: 'question', weight: 10 },
-    ]);
-  });
-
-  it('drops question except at full time', () => {
-    const styles = styleWeights('goal', 'playful').map(entry => entry.style);
-    expect(styles).toEqual(['punchy', 'playful', 'dramatic', 'timeline']);
-  });
-
-  it('drops playful for a neutral tone but keeps timeline for low-filter reactions', () => {
+  it('only offers punchy and timeline for neutral tone', () => {
     expect(styleWeights('goal', 'neutral')).toEqual([
-      { style: 'punchy', weight: 45 },
-      { style: 'dramatic', weight: 20 },
-      { style: 'timeline', weight: 35 },
+      { style: 'punchy', weight: 60 },
+      { style: 'timeline', weight: 40 },
     ]);
     expect(styleWeights('full_time', 'neutral')).toEqual([
-      { style: 'punchy', weight: 40 },
-      { style: 'dramatic', weight: 15 },
-      { style: 'timeline', weight: 30 },
-      { style: 'question', weight: 15 },
+      { style: 'punchy', weight: 60 },
+      { style: 'timeline', weight: 40 },
+    ]);
+  });
+
+  it('only offers punchy and timeline for playful tone', () => {
+    expect(styleWeights('goal', 'playful')).toEqual([
+      { style: 'punchy', weight: 50 },
+      { style: 'timeline', weight: 50 },
     ]);
   });
 
   it('makes timeline the dominant spicy style', () => {
     expect(styleWeights('goal', 'spicy')).toEqual([
-      { style: 'punchy', weight: 30 },
-      { style: 'playful', weight: 20 },
-      { style: 'dramatic', weight: 10 },
-      { style: 'timeline', weight: 40 },
-    ]);
-    expect(styleWeights('full_time', 'spicy')).toEqual([
-      { style: 'punchy', weight: 25 },
-      { style: 'playful', weight: 20 },
-      { style: 'dramatic', weight: 10 },
-      { style: 'timeline', weight: 35 },
-      { style: 'question', weight: 10 },
+      { style: 'punchy', weight: 40 },
+      { style: 'timeline', weight: 60 },
     ]);
   });
 });
 
 describe('sampleCommentaryStyle', () => {
-  it('never samples question except at full time', () => {
+  it('only ever samples punchy or timeline', () => {
     for (let i = 0; i < 100; i++) {
-      expect(sampleCommentaryStyle('goal', 'playful', () => i / 100)).not.toBe('question');
+      const style = sampleCommentaryStyle('goal', 'spicy', () => i / 100);
+      expect(['punchy', 'timeline']).toContain(style);
     }
   });
 
-  it('never samples playful when tone is neutral', () => {
+  it('can sample punchy or timeline at full time too', () => {
     for (let i = 0; i < 100; i++) {
       const style = sampleCommentaryStyle('full_time', 'neutral', () => i / 100);
-      expect(style).not.toBe('playful');
+      expect(['punchy', 'timeline']).toContain(style);
     }
-  });
-
-  it('can sample question at full time', () => {
-    expect(sampleCommentaryStyle('full_time', 'playful', () => 0.99)).toBe('question');
   });
 });
 
 describe('sampleInfluencerStyle', () => {
-  it('can sample question for a post-match verdict', () => {
-    expect(sampleInfluencerStyle('post_match_verdict', 'playful', () => 0.99)).toBe('question');
+  it('only ever samples punchy or timeline for a post-match verdict', () => {
+    for (let i = 0; i < 100; i++) {
+      const style = sampleInfluencerStyle('post_match_verdict', 'playful', () => i / 100);
+      expect(['punchy', 'timeline']).toContain(style);
+    }
   });
 
-  it('never samples question for a prediction', () => {
+  it('only ever samples punchy or timeline for a prediction', () => {
     for (let i = 0; i < 100; i++) {
-      expect(sampleInfluencerStyle('prediction', 'spicy', () => i / 100)).not.toBe('question');
+      const style = sampleInfluencerStyle('prediction', 'spicy', () => i / 100);
+      expect(['punchy', 'timeline']).toContain(style);
     }
   });
 
@@ -82,6 +63,6 @@ describe('sampleInfluencerStyle', () => {
     const persisted = 'timeline' as const;
     const sampled = sampleInfluencerStyle('prediction', 'neutral', () => 0);
     expect(persisted ?? sampled).toBe('timeline');
-    expect(sampled).not.toBe('timeline');
+    expect(sampled).toBe('punchy');
   });
 });

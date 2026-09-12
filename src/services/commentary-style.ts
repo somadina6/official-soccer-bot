@@ -10,77 +10,30 @@ export type StyleWeight = { style: CommentaryStyle; weight: number };
 /**
  * Commentary-style distribution by banter tone.
  *
- * Neutral:
- * - energetic and polished;
- * - no playful or timeline-style teasing.
- *
- * Playful:
- * - balanced football humour;
- * - occasional Football-Twitter energy.
- *
- * Spicy:
- * - timeline is the dominant style;
- * - punchy and playful remain available to prevent repetition.
- *
- * Question is only available at full time.
+ * Only punchy and timeline are in rotation. Spicy leans harder into
+ * timeline; neutral and playful lean more toward punchy.
  */
 export function styleWeights(
-  situation: CommentarySituation,
+  _situation: CommentarySituation,
   tone: BanterTone,
 ): StyleWeight[] {
-  const fullTime = situation === "full_time";
-
-  if (tone === "neutral") {
-    if (fullTime) {
-      return [
-        { style: "punchy", weight: 40 },
-        { style: "dramatic", weight: 15 },
-        { style: "timeline", weight: 30 },
-        { style: "question", weight: 15 },
-      ];
-    }
-
+  if (tone === "spicy") {
     return [
-      { style: "punchy", weight: 45 },
-      { style: "dramatic", weight: 20 },
-      { style: "timeline", weight: 35 },
+      { style: "punchy", weight: 40 },
+      { style: "timeline", weight: 60 },
     ];
   }
 
   if (tone === "playful") {
-    if (fullTime) {
-      return [
-        { style: "punchy", weight: 20 },
-        { style: "playful", weight: 20 },
-        { style: "dramatic", weight: 10 },
-        { style: "timeline", weight: 40 },
-        { style: "question", weight: 10 },
-      ];
-    }
-
     return [
-      { style: "punchy", weight: 25 },
-      { style: "playful", weight: 25 },
-      { style: "dramatic", weight: 10 },
-      { style: "timeline", weight: 40 },
+      { style: "punchy", weight: 50 },
+      { style: "timeline", weight: 50 },
     ];
   }
 
-  // Spicy
-  if (fullTime) {
-    return [
-      { style: "punchy", weight: 25 },
-      { style: "playful", weight: 20 },
-      { style: "dramatic", weight: 10 },
-      { style: "timeline", weight: 35 },
-      { style: "question", weight: 10 },
-    ];
-  }
-
+  // Neutral
   return [
-    { style: "punchy", weight: 30 },
-    { style: "playful", weight: 20 },
-    { style: "dramatic", weight: 10 },
+    { style: "punchy", weight: 60 },
     { style: "timeline", weight: 40 },
   ];
 }
