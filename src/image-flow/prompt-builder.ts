@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v12';
+export const IMAGE_PROMPT_VERSION = 'prompt-v13';
 
 const SHARED_CONSTRAINTS = `
 No duplicate people, distorted limbs, or extra fingers. Kit branding (club

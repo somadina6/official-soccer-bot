@@ -70,7 +70,7 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
     await updateImageJob(job.id, { status: 'compositing' });
     const scorers =
       event.type === 'FULL_TIME' ? await loadFullTimeScorers(fixtureId) : undefined;
-    finalJpeg = await composeEventImage(generated.image, event, { overlay: true, scorers });
+    finalJpeg = await composeEventImage(generated.image, event, { scorers });
     finalJpeg = await enforceXLimit(finalJpeg);
   } catch (error) {
     const lastErrorCode = errorCodeOf(error);

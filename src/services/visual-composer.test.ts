@@ -58,11 +58,10 @@ describe('visual composer', () => {
     expect(truncateLabel('Wolverhampton Wanderers Athletic Club', 22).endsWith('…')).toBe(true);
   });
 
-  it('composites a full-time scorers list even with the model-rendered overlay disabled', async () => {
+  it('composites a full-time scorers list alongside the deterministic overlay', async () => {
     const background = await solidFallbackBackground(['#EF0107', '#034694']);
     const fullTime = { ...event, type: 'FULL_TIME' as const };
     const image = await composeEventImage(background, fullTime, {
-      overlay: false,
       scorers: [
         { name: 'Saka', minute: 23, side: 'home', ownGoal: false },
         { name: "N'Golo Kanté", minute: 90, stoppageMinute: 3, side: 'away', ownGoal: false },
@@ -76,7 +75,7 @@ describe('visual composer', () => {
     const background = await solidFallbackBackground([]);
     const fullTime = { ...event, type: 'FULL_TIME' as const };
     await expect(
-      composeEventImage(background, fullTime, { overlay: false, scorers: [] }),
+      composeEventImage(background, fullTime, { scorers: [] }),
     ).resolves.toBeInstanceOf(Buffer);
   });
 });

@@ -176,41 +176,34 @@ function scorersSvg(entries: readonly FullTimeScorer[]): string {
 }
 
 export type ComposeEventImageOptions = {
-  /**
-   * When false, skips the deterministic scoreboard/caption overlay: the
-   * prompt now asks the image model to render the scoreboard and player
-   * name itself (prompt-builder.ts), so compositing it again would draw a
-   * duplicate. Used by the AI pipeline (image-pipeline.ts); left on for
-   * callers with no AI photo at all, like the VAR-correction fallback
-   * (post-corrections.ts), which still needs code to draw every fact.
-   */
-  overlay?: boolean;
   /** Full-time only: confirmed scorers to list beneath the top bar, in code-rendered text. */
   scorers?: readonly FullTimeScorer[] | undefined;
 };
 
-/** Composes the final 1024×1536 JPEG from generated (or fallback) artwork, optionally plus the overlay. */
+/**
+ * Composes the final 1024×1536 JPEG from generated (or fallback) artwork
+ * plus the deterministic scoreboard/caption overlay. The overlay always
+ * draws in code — never left to the image model — because model-rendered
+ * text is unreliable (garbled ampersands, multi-line wraps, long names);
+ * the prompt (prompt-builder.ts) only asks the model to leave the bands
+ * this overlay occupies visually calm.
+ */
 export async function composeEventImage(
   background: Buffer,
   event: MatchEvent,
   options: ComposeEventImageOptions = {},
 ): Promise<Buffer> {
-  const overlay = options.overlay ?? true;
-  const svgFragments: string[] = [];
-  if (overlay) svgFragments.push(scoreboardSvg(event), captionSvg(event));
+  const svgFragments: string[] = [OVERLAY_FONT_FACE_SVG, scoreboardSvg(event), captionSvg(event)];
   if (options.scorers?.length) svgFragments.push(scorersSvg(options.scorers));
-  if (svgFragments.length > 0) svgFragments.unshift(OVERLAY_FONT_FACE_SVG);
 
   try {
-    let pipeline = sharp(background)
-      .rotate()
-      .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' });
-    if (svgFragments.length > 0) {
-      const svg = `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+    const svg = `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   ${svgFragments.join('\n')}
 </svg>`;
-      pipeline = pipeline.composite([{ input: Buffer.from(svg), top: 0, left: 0 }]);
-    }
+    const pipeline = sharp(background)
+      .rotate()
+      .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' })
+      .composite([{ input: Buffer.from(svg), top: 0, left: 0 }]);
     const image = await pipeline
       .jpeg({ quality: 85, progressive: true, chromaSubsampling: '4:4:4' })
       .toBuffer();
