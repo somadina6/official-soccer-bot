@@ -10,71 +10,40 @@ export const IMAGE_PROMPT_VERSION = 'prompt-v12';
 const SHARED_CONSTRAINTS = `
 No duplicate people, distorted limbs, or extra fingers. Kit branding (club
 crests, sponsor marks, league sleeve patches) is allowed. No watermark, and
-no stray or invented text anywhere in the image beyond what is specified
-below.
+no text, numbers, or lettering of any kind anywhere in the image — every
+scoreboard, name, and caption is drawn afterward by a separate deterministic
+process, so any text the model attempts here would only ever be redundant or
+garbled.
 `.trim();
-
-const EVENT_LABELS: Record<MatchEvent['type'], string> = {
-  GOAL: 'GOAL',
-  OWN_GOAL: 'OWN GOAL',
-  RED_CARD: 'RED CARD',
-  PENALTY_MISSED: 'PENALTY MISSED',
-  VAR: 'VAR DECISION',
-  FULL_TIME: 'FULL-TIME',
-};
 
 /**
- * Model-rendered scoreboard + caption instructions, replacing the old
- * deterministic Sharp overlay for AI-generated events (visual-composer.ts
- * skips its overlay for this pipeline — see ComposeEventImageOptions).
- * Tested across several samples (long team names, double-digit scores,
- * accented names) and the model rendered every case correctly; still
- * inherently probabilistic compared to code-drawn text, so keep an eye on
- * production output.
+ * Reserves the space the deterministic Sharp overlay draws into afterward
+ * (visual-composer.ts), so the model's own artwork never competes with it.
+ * Image-generation models render text as an unreliable visual pattern rather
+ * than actual characters — ampersands, long names, and multi-line wraps are
+ * the weakest cases — so scoreboard/caption text is always code-drawn now;
+ * the model is only asked to leave the right amount of calm, empty space.
  */
-function scoreboardInstructionsFor(event: MatchEvent): string {
-  const label = EVENT_LABELS[event.type];
-  const home = event.home.name.toUpperCase();
-  const away = event.away.name.toUpperCase();
-  const requiredStrings = [
-    `"${home}"`,
-    `"${away}"`,
-    `"${event.home.score}"`,
-    `"${event.away.score}"`,
-    `"${label}"`,
-  ];
-
-  let playerBlock = '';
-  if (event.player && event.type !== 'FULL_TIME') {
-    const player = event.player.name.toUpperCase();
-    const minute = minuteLabel(event);
-    playerBlock = `
-2. Near the bottom of the frame, large bold white capital letters reading
-   "${player}" on one line, and directly below it, smaller white text
-   reading "${minute}".
-`;
-    requiredStrings.push(`"${player}"`, `"${minute}"`);
-  }
-
-  return `
-This image MUST include the following text and graphic elements, rendered
-crisply and accurately as part of the composition, not a caption added
-afterward:
-
-1. A solid dark navy bar across the very top of the frame, about one eighth
-   of the image height. On the far left of that bar, the text "${home}" in
-   bold white sans-serif, with the number "${event.home.score}" in large
-   bold white directly beneath it. On the far right of that bar, the text
-   "${away}" in bold white sans-serif, with the number "${event.away.score}"
-   in large bold white directly beneath it. In the exact center of that bar,
-   a white rounded pill outline containing the words "${label}" in bold
-   white capital letters. If a team name is long, wrap it onto two lines
-   rather than letting it overlap the pill.
-${playerBlock}
-Every character in ${requiredStrings.join(', ')} must be spelled correctly,
-letter for letter, legible, and exactly as given above — no invented,
-duplicated, or garbled text anywhere else in the image.
+function overlayReserveInstructionsFor(event: MatchEvent): string {
+  const topBand = `
+Leave a plain, uncluttered horizontal band across the very top of the frame,
+about one eighth of the image height, with no important subject detail,
+crests, or graphic elements in it — just a simple, mostly even backdrop. A
+solid scoreboard bar with the team names and score is composited over that
+band afterward.
 `.trim();
+
+  if (event.type === 'FULL_TIME') return topBand;
+
+  if (!event.player) return topBand;
+
+  const bottomBand = `
+Leave the bottom sixth of the frame relatively calm, with no crucial facial
+detail or action right at the very bottom edge. A name and minute caption is
+composited over that area afterward.
+`.trim();
+
+  return `${topBand}\n\n${bottomBand}`;
 }
 
 const CAMERA_STYLE = `
@@ -175,20 +144,23 @@ function crestLineFor(side: MatchEvent['home']): string {
 }
 
 /**
- * Full-time is a graphic, not a photo, but now also model-rendered — see
- * scoreboardInstructionsFor. The band directly below the top bar is reserved
- * for a code-drawn scorers list (visual-composer.ts scorersSvg), composited
- * on afterward, so the model must keep that region visually calm.
+ * Full-time is a graphic, not a photo. All of its text — the top scoreboard
+ * bar and the scorers list beneath it — is drawn afterward by code
+ * (visual-composer.ts), so the model only supplies the backdrop art and
+ * must keep both of those bands visually calm — see
+ * overlayReserveInstructionsFor.
  */
 const FULL_TIME_CONSTRAINTS = `
 No players, no people, no photographs of humans in the backdrop art. Crests
 must not be duplicated, invented beyond the two named clubs, or distorted.
-No watermark, and no stray or invented text anywhere in the image beyond
-what is specified below. Leave the band directly beneath the top scoreboard
-bar, roughly the next quarter of the frame, visually calm and uncluttered —
-no crests, text, or important detail placed there — since a scorers list is
-composited over that region afterward. Keep the two crests and the main
-composition centered in the lower two-thirds of the frame.
+No watermark, and no text, numbers, or lettering of any kind anywhere in the
+image — the scoreboard bar, team names, score, and scorers list are all
+drawn afterward by a separate deterministic process. Leave the band directly
+beneath the top eighth of the frame, roughly the next quarter of the image
+height, visually calm and uncluttered — no crests or important detail placed
+there — since a scorers list is composited over that region afterward. Keep
+the two crests and the main composition centered in the lower two-thirds of
+the frame.
 `.trim();
 
 function subjectFor(event: MatchEvent): string {
@@ -292,7 +264,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${scoreboardInstructionsFor(event)}
+${overlayReserveInstructionsFor(event)}
 `.trim();
     }
 
@@ -312,7 +284,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${scoreboardInstructionsFor(event)}
+${overlayReserveInstructionsFor(event)}
 `.trim();
     }
 
@@ -330,7 +302,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${scoreboardInstructionsFor(event)}
+${overlayReserveInstructionsFor(event)}
 `.trim();
     }
 
@@ -348,7 +320,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${scoreboardInstructionsFor(event)}
+${overlayReserveInstructionsFor(event)}
 `.trim();
     }
 
@@ -365,7 +337,7 @@ ${bothKitsLine(event)} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${scoreboardInstructionsFor(event)}
+${overlayReserveInstructionsFor(event)}
 `.trim();
 
     case 'FULL_TIME': {
@@ -389,7 +361,7 @@ ${moodLine}
 
 ${FULL_TIME_CONSTRAINTS}
 
-${scoreboardInstructionsFor(event)}
+${overlayReserveInstructionsFor(event)}
 `.trim();
     }
   }
