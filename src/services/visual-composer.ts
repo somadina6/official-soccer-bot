@@ -132,69 +132,137 @@ export type FullTimeScorer = {
   ownGoal: boolean;
 };
 
-const SCORERS_TOP = TOP_BAR_HEIGHT + 34;
-const SCORERS_ROW_HEIGHT = 34;
+const COMPETITION_LABEL = 'PREMIER LEAGUE';
+/** Vertical centre of the crest row the prompt asks the model to draw (see FULL_TIME_CONSTRAINTS) — about two thirds down the frame. */
+const CREST_ROW_CENTER_Y = 980;
+const SCORERS_ROW_HEIGHT = 36;
+
+/** "Pascal Groß" → "P. GROSS", broadcast-style — first initial plus every word after it. */
+function scorerSurnameLabel(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0]!.toUpperCase();
+  const initial = parts[0]!.charAt(0).toUpperCase();
+  const surname = parts.slice(1).join(' ').toUpperCase();
+  return `${initial}. ${surname}`;
+}
 
 function scorerLabel(entry: FullTimeScorer): string {
   const minute = entry.stoppageMinute ? `${entry.minute}+${entry.stoppageMinute}'` : `${entry.minute}'`;
-  const name = escapeXml(truncateLabel(entry.name, 22));
   const suffix = entry.ownGoal ? ' (OG)' : '';
-  return `${minute}  ${name}${suffix}`;
+  return `${minute}  |  ${scorerSurnameLabel(entry.name)}${suffix}`;
 }
 
-function scorersColumnSvg(entries: readonly FullTimeScorer[], side: 'home' | 'away'): string {
-  const column = entries.filter(entry => entry.side === side);
-  const anchor = side === 'home' ? 'start' : 'end';
-  const x = side === 'home' ? BAR_PADDING : IMAGE_WIDTH - BAR_PADDING;
-  return column
+/**
+ * A dark outline drawn behind text fill, so words stay legible no matter how
+ * bright the model's backdrop art happens to be at that exact spot — a fade
+ * gradient alone isn't reliable up near the crest row, where it's still
+ * mostly transparent.
+ */
+const TEXT_SHADOW_ATTRS = 'paint-order="stroke" stroke="#000000" stroke-opacity="0.65" stroke-width="6" stroke-linejoin="round"';
+
+/**
+ * Dark fade behind the crest row, score, and scorer list, so the whole
+ * bottom third reads as a coherent panel even before the per-letter outline
+ * kicks in — the same role a broadcast graphic's solid panel plays, but as
+ * a soft gradient since there's no hard-edged card here.
+ */
+function fullTimeFadeSvg(): string {
+  const fadeTop = CREST_ROW_CENTER_Y - 220;
+  return `
+  <defs>
+    <linearGradient id="ft-fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#05070d" stop-opacity="0.15"/>
+      <stop offset="30%" stop-color="#05070d" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#05070d" stop-opacity="0.94"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="${fadeTop}" width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT - fadeTop}" fill="url(#ft-fade)"/>
+`;
+}
+
+/** Competition name flanked by thin rules, sitting just above the crest row. */
+function competitionDividerSvg(): string {
+  const y = CREST_ROW_CENTER_Y - 140;
+  const halfLabelWidth = (COMPETITION_LABEL.length * 15 + 40) / 2;
+  return `
+  <text x="${IMAGE_WIDTH / 2}" y="${y + 6}" text-anchor="middle" ${TEXT_SHADOW_ATTRS}
+        font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="22" font-weight="700"
+        fill="#ffffff" letter-spacing="3">${COMPETITION_LABEL}</text>
+  <line x1="${BAR_PADDING}" y1="${y}" x2="${IMAGE_WIDTH / 2 - halfLabelWidth}" y2="${y}"
+        stroke="#000000" stroke-opacity="0.55" stroke-width="4"/>
+  <line x1="${IMAGE_WIDTH / 2 + halfLabelWidth}" y1="${y}" x2="${IMAGE_WIDTH - BAR_PADDING}" y2="${y}"
+        stroke="#000000" stroke-opacity="0.55" stroke-width="4"/>
+  <line x1="${BAR_PADDING}" y1="${y}" x2="${IMAGE_WIDTH / 2 - halfLabelWidth}" y2="${y}"
+        stroke="#ffffff" stroke-opacity="0.9" stroke-width="1.5"/>
+  <line x1="${IMAGE_WIDTH / 2 + halfLabelWidth}" y1="${y}" x2="${IMAGE_WIDTH - BAR_PADDING}" y2="${y}"
+        stroke="#ffffff" stroke-opacity="0.9" stroke-width="1.5"/>
+`;
+}
+
+/**
+ * The score itself, centered in the vertical gap the prompt asks the model
+ * to leave clear between the two model-drawn crests (see
+ * FULL_TIME_CONSTRAINTS in prompt-builder.ts) — every digit code-rendered so
+ * it's always exactly right, same principle as the old top-bar score.
+ */
+function fullTimeScoreSvg(event: MatchEvent): string {
+  const scoreText = `${event.home.score} - ${event.away.score}`;
+  return `
+  <text x="${IMAGE_WIDTH / 2}" y="${CREST_ROW_CENTER_Y + 40}" text-anchor="middle" ${TEXT_SHADOW_ATTRS}
+        font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="104" font-weight="900"
+        fill="#ffffff">${escapeXml(scoreText)}</text>
+`;
+}
+
+/**
+ * Full-time scorers list: one centered column ordered by minute, broadcast
+ * style ("31'  |  P. GROSS"), code-rendered beneath the crest row so every
+ * name is spelled exactly right (the AI image prompt reserves this band —
+ * see FULL_TIME_CONSTRAINTS in prompt-builder.ts). Skipped when empty.
+ */
+function fullTimeScorersSvg(entries: readonly FullTimeScorer[]): string {
+  if (entries.length === 0) return '';
+  const sorted = entries.slice().sort((a, b) => {
+    const aKey = a.minute * 1000 + (a.stoppageMinute ?? 0);
+    const bKey = b.minute * 1000 + (b.stoppageMinute ?? 0);
+    return aKey - bKey;
+  });
+  const top = CREST_ROW_CENTER_Y + 110;
+  return sorted
     .map((entry, index) => {
-      const y = SCORERS_TOP + index * SCORERS_ROW_HEIGHT;
-      return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="26" font-weight="700" fill="#f4f6fa">${escapeXml(scorerLabel(entry))}</text>`;
+      const y = top + index * SCORERS_ROW_HEIGHT;
+      return `<text x="${IMAGE_WIDTH / 2}" y="${y}" text-anchor="middle" ${TEXT_SHADOW_ATTRS} font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="27" font-weight="700" fill="#f4f6fa" letter-spacing="1">${escapeXml(scorerLabel(entry))}</text>`;
     })
     .join('\n');
 }
 
-/**
- * Full-time scorers list: minute + name per side, code-rendered directly
- * beneath the model-rendered top bar so every name is spelled exactly right
- * (the AI image prompt reserves this band — see FULL_TIME_CONSTRAINTS in
- * prompt-builder.ts). Skipped entirely when there are no known scorers.
- */
-function scorersSvg(entries: readonly FullTimeScorer[]): string {
-  if (entries.length === 0) return '';
-  const rows = Math.max(
-    entries.filter(entry => entry.side === 'home').length,
-    entries.filter(entry => entry.side === 'away').length,
-  );
-  const backdropHeight = SCORERS_TOP - TOP_BAR_HEIGHT + rows * SCORERS_ROW_HEIGHT + 16;
-
-  return `
-  <rect x="0" y="${TOP_BAR_HEIGHT}" width="${IMAGE_WIDTH}" height="${backdropHeight}" fill="#0a1526" fill-opacity="0.72"/>
-  ${scorersColumnSvg(entries, 'home')}
-  ${scorersColumnSvg(entries, 'away')}
-`;
-}
-
 export type ComposeEventImageOptions = {
-  /** Full-time only: confirmed scorers to list beneath the top bar, in code-rendered text. */
+  /** Full-time only: confirmed scorers to list beneath the crest row, in code-rendered text. */
   scorers?: readonly FullTimeScorer[] | undefined;
 };
 
 /**
  * Composes the final 1024×1536 JPEG from generated (or fallback) artwork
- * plus the deterministic scoreboard/caption overlay. The overlay always
- * draws in code — never left to the image model — because model-rendered
- * text is unreliable (garbled ampersands, multi-line wraps, long names);
- * the prompt (prompt-builder.ts) only asks the model to leave the bands
- * this overlay occupies visually calm.
+ * plus a deterministic overlay. The overlay always draws in code — never
+ * left to the image model — because model-rendered text is unreliable
+ * (garbled ampersands, multi-line wraps, long names); the prompt
+ * (prompt-builder.ts) only asks the model to leave the bands this overlay
+ * occupies visually calm. Full-time gets its own score-card layout (crest
+ * row + centered score + competition line + scorers list); every other
+ * event type gets the top scoreboard bar + bottom player caption.
  */
 export async function composeEventImage(
   background: Buffer,
   event: MatchEvent,
   options: ComposeEventImageOptions = {},
 ): Promise<Buffer> {
-  const svgFragments: string[] = [OVERLAY_FONT_FACE_SVG, scoreboardSvg(event), captionSvg(event)];
-  if (options.scorers?.length) svgFragments.push(scorersSvg(options.scorers));
+  const svgFragments: string[] =
+    event.type === 'FULL_TIME'
+      ? [OVERLAY_FONT_FACE_SVG, fullTimeFadeSvg(), competitionDividerSvg(), fullTimeScoreSvg(event)]
+      : [OVERLAY_FONT_FACE_SVG, scoreboardSvg(event), captionSvg(event)];
+  if (event.type === 'FULL_TIME' && options.scorers?.length) {
+    svgFragments.push(fullTimeScorersSvg(options.scorers));
+  }
 
   try {
     const svg = `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">

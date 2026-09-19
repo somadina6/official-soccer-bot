@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v13';
+export const IMAGE_PROMPT_VERSION = 'prompt-v14';
 
 const SHARED_CONSTRAINTS = `
 No duplicate people, distorted limbs, or extra fingers. Kit branding (club
@@ -25,6 +25,11 @@ garbled.
  * the model is only asked to leave the right amount of calm, empty space.
  */
 function overlayReserveInstructionsFor(event: MatchEvent): string {
+  // Full-time's reserved bands (crest gap, bottom quarter) live in
+  // FULL_TIME_CONSTRAINTS instead, since they're specific to its score-card
+  // layout rather than the shared top-bar-and-caption layout below.
+  if (event.type === 'FULL_TIME') return '';
+
   const topBand = `
 Leave a plain, uncluttered horizontal band across the very top of the frame,
 about one eighth of the image height, with no important subject detail,
@@ -32,8 +37,6 @@ crests, or graphic elements in it — just a simple, mostly even backdrop. A
 solid scoreboard bar with the team names and score is composited over that
 band afterward.
 `.trim();
-
-  if (event.type === 'FULL_TIME') return topBand;
 
   if (!event.player) return topBand;
 
@@ -144,23 +147,25 @@ function crestLineFor(side: MatchEvent['home']): string {
 }
 
 /**
- * Full-time is a graphic, not a photo. All of its text — the top scoreboard
- * bar and the scorers list beneath it — is drawn afterward by code
- * (visual-composer.ts), so the model only supplies the backdrop art and
- * must keep both of those bands visually calm — see
- * overlayReserveInstructionsFor.
+ * Full-time is a score-card graphic, not a photo. Everything but the crests
+ * and backdrop art is drawn afterward by code (visual-composer.ts): the
+ * score sits in a gap the model leaves between the crests, and a
+ * competition-name divider plus the scorers list sit above and below that
+ * row. The model only supplies backdrop art and the two crests, and must
+ * keep those three bands visually calm.
  */
 const FULL_TIME_CONSTRAINTS = `
 No players, no people, no photographs of humans in the backdrop art. Crests
 must not be duplicated, invented beyond the two named clubs, or distorted.
 No watermark, and no text, numbers, or lettering of any kind anywhere in the
-image — the scoreboard bar, team names, score, and scorers list are all
-drawn afterward by a separate deterministic process. Leave the band directly
-beneath the top eighth of the frame, roughly the next quarter of the image
-height, visually calm and uncluttered — no crests or important detail placed
-there — since a scorers list is composited over that region afterward. Keep
-the two crests and the main composition centered in the lower two-thirds of
-the frame.
+image — the competition name, score, and scorers list are all drawn
+afterward by a separate deterministic process. Arrange the two crests in a
+single horizontal row about two thirds of the way down the frame, and leave
+a clear vertical gap about one sixth of the image width directly between
+them — no crest detail, divider bar, or texture in that gap — for a
+scoreline to be composited there. Leave the bottom quarter of the frame,
+below that crest row, visually calm and uncluttered, since a scorers list is
+composited over that region afterward.
 `.trim();
 
 function subjectFor(event: MatchEvent): string {
@@ -352,10 +357,10 @@ ${overlayReserveInstructionsFor(event)}
 Vertical portrait orientation. Full-time result graphic, no players, no people,
 no photographs of humans. Clean, modern, cinematic sports broadcast graphic
 style: the ${crestLineFor(event.home)} on the left facing the
-${crestLineFor(event.away)} on the right, separated by a bold abstract
-divider, set against a subtly blurred, floodlit stadium backdrop with punchy
-contemporary colour grading. Balanced, centered composition with clear space
-around each crest.
+${crestLineFor(event.away)} on the right, arranged in a single horizontal row
+about two thirds of the way down the frame, set against a subtly blurred,
+floodlit stadium backdrop with punchy contemporary colour grading. Balanced,
+centered composition with clear space around each crest.
 
 ${moodLine}
 
