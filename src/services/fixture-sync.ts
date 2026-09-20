@@ -6,6 +6,7 @@ import {
   fetchSchedule,
 } from "../providers/sportsapi/rest-client.js";
 import {
+  canonicalTournamentName,
   extractLiveMatches,
   extractScheduledMatches,
   shouldWatchMatch,
@@ -98,6 +99,7 @@ export async function syncSchedule(
         provider: "sportsapi-pro",
         provider_match_id: m.id,
         competition_id: competition.id,
+        competition_name: canonicalTournamentName(m) ?? null,
         starts_at: new Date(m.startTimestamp * 1000).toISOString(),
         home_team: m.homeTeam,
         away_team: m.awayTeam,
@@ -137,6 +139,7 @@ export async function reconcileCurrentlyLive(
         provider: "sportsapi-pro",
         provider_match_id: m.id,
         competition_id: competition.id,
+        competition_name: canonicalTournamentName(m) ?? null,
         starts_at: new Date(m.startTimestamp * 1000).toISOString(),
         status: "live",
         home_team: m.homeTeam,

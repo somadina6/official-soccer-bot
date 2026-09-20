@@ -21,7 +21,8 @@ export function hashPayload(payload: unknown): string {
 const TournamentSchema = z
   .object({
     id: z.number(),
-    uniqueTournament: z.object({ id: z.number() }).passthrough().optional(),
+    name: z.string().optional(),
+    uniqueTournament: z.object({ id: z.number(), name: z.string().optional() }).passthrough().optional(),
   })
   .passthrough();
 
@@ -48,6 +49,16 @@ export function teamIdFromUnknown(team: unknown): number | undefined {
 /** Canonical competition id: uniqueTournament.id, falling back to tournament.id. */
 export function canonicalTournamentId(match: ScheduledMatch): number {
   return match.tournament.uniqueTournament?.id ?? match.tournament.id;
+}
+
+/**
+ * The real competition name (e.g. "Premier League", "FA Cup", "Taça de
+ * Portugal"), for display — never trust fixtures.competition_id for this,
+ * since it always points at the single Premier League row regardless of
+ * which competition the match is actually in (see shouldWatchMatch).
+ */
+export function canonicalTournamentName(match: ScheduledMatch): string | undefined {
+  return match.tournament.uniqueTournament?.name ?? match.tournament.name;
 }
 
 export function matchInvolvesTeam(match: ScheduledMatch, teamIds: Set<number>): boolean {
@@ -229,6 +240,8 @@ function mapIncidentType(incident: ProviderIncident): MatchEventType | null {
 export type MatchContext = {
   matchId: string;
   competitionId: string;
+  /** Real competition name snapshotted at fixture-sync time (see canonicalTournamentName); absent for old fixtures synced before this existed. */
+  competitionName?: string | undefined;
   home: { id: string; name: string; score: number; colours: string[] };
   away: { id: string; name: string; score: number; colours: string[] };
   /**
@@ -275,6 +288,7 @@ export function normalizeIncident(raw: unknown, context: MatchContext): MatchEve
     provider: 'sportsapi-pro',
     matchId: context.matchId,
     competitionId: context.competitionId,
+    competitionName: context.competitionName,
     type,
     status: overturned ? 'OVERTURNED' : incident.isConfirmed ? 'CONFIRMED' : 'PROVISIONAL',
     minute,

@@ -34,6 +34,20 @@ describe('visual composer', () => {
     expect(meta.height).toBe(IMAGE_HEIGHT);
   });
 
+  it('skips the code-drawn overlay when overlay is false, leaving the model-drawn photo untouched', async () => {
+    const background = await solidFallbackBackground(['#ffcc00', '#ffcc00']);
+    const withOverlay = await composeEventImage(background, event, { overlay: true });
+    const withoutOverlay = await composeEventImage(background, event, { overlay: false });
+
+    const overlaidTopLeft = await sharp(withOverlay).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
+    const plainTopLeft = await sharp(withoutOverlay).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
+
+    // With the overlay, the top-left pixel is inside the dark navy scoreboard bar.
+    expect(overlaidTopLeft[0]).toBeLessThan(30);
+    // Without it, the top-left pixel is the model's own (here: solid yellow) background.
+    expect(plainTopLeft[0]).toBeGreaterThan(200);
+  });
+
   it('escapes XML-sensitive characters in names', async () => {
     const background = await solidFallbackBackground([]);
     const tricky = {
@@ -69,6 +83,15 @@ describe('visual composer', () => {
     });
     const meta = await sharp(image).metadata();
     expect(meta.format).toBe('jpeg');
+  });
+
+  it('renders the real competition name on the divider, falling back to Premier League when absent', async () => {
+    const background = await solidFallbackBackground([]);
+    const faCup = { ...event, type: 'FULL_TIME' as const, competitionName: 'FA Cup' };
+    await expect(composeEventImage(background, faCup)).resolves.toBeInstanceOf(Buffer);
+
+    const noName = { ...event, type: 'FULL_TIME' as const, competitionName: undefined };
+    await expect(composeEventImage(background, noName)).resolves.toBeInstanceOf(Buffer);
   });
 
   it('draws no scorers backdrop when the list is empty', async () => {

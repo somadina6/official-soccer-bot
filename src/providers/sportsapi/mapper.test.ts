@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildIdempotencyKey } from '../../domain/match-event.js';
 import {
   canonicalTournamentId,
+  canonicalTournamentName,
   extractApprovedIncidentFacts,
   extractApprovedSeasonFacts,
   extractIncidents,
@@ -48,6 +49,20 @@ describe('normalizeIncident', () => {
     expect(event!.player).toEqual({ id: '790864', name: 'Levente Szabó' });
     expect(event!.assist).toEqual({ id: '190911', name: 'Josip Ćorluka' });
     expect(event!.incidentId).toBe('357835369');
+  });
+
+  it('carries the context competition name onto the event, when present', () => {
+    const withName = normalizeIncident(
+      { id: 1, incidentType: 'goal', incidentClass: 'regular', time: 10 },
+      { ...context, competitionName: 'FA Cup' },
+    );
+    expect(withName!.competitionName).toBe('FA Cup');
+
+    const withoutName = normalizeIncident(
+      { id: 2, incidentType: 'goal', incidentClass: 'regular', time: 11 },
+      context,
+    );
+    expect(withoutName!.competitionName).toBeUndefined();
   });
 
   it('maps ownGoal class and red cards; ignores yellows and substitutions', () => {
@@ -203,12 +218,48 @@ describe('extractScheduledMatches', () => {
     expect(matches).toHaveLength(1);
     expect(matches[0]!.id).toBe(16363633);
     expect(canonicalTournamentId(matches[0]!)).toBe(17);
+    expect(canonicalTournamentName(matches[0]!)).toBe('Premier League');
   });
 
   it('returns an empty list for unrecognized payloads', () => {
     expect(extractScheduledMatches({ unexpected: true })).toEqual([]);
     expect(extractScheduledMatches({ data: { tournaments: [] } })).toEqual([]);
     expect(extractScheduledMatches(null)).toEqual([]);
+  });
+});
+
+describe('canonicalTournamentName', () => {
+  it('prefers uniqueTournament.name, e.g. for a cup tie', () => {
+    const match: ScheduledMatch = {
+      id: 1,
+      startTimestamp: 0,
+      tournament: { id: 5, name: 'FA Cup', uniqueTournament: { id: 19, name: 'FA Cup' } },
+      homeTeam: {},
+      awayTeam: {},
+    };
+    expect(canonicalTournamentName(match)).toBe('FA Cup');
+  });
+
+  it('falls back to tournament.name when there is no uniqueTournament', () => {
+    const match: ScheduledMatch = {
+      id: 1,
+      startTimestamp: 0,
+      tournament: { id: 5, name: 'Club Friendly Games' },
+      homeTeam: {},
+      awayTeam: {},
+    };
+    expect(canonicalTournamentName(match)).toBe('Club Friendly Games');
+  });
+
+  it('is undefined when the provider gives no name at all', () => {
+    const match: ScheduledMatch = {
+      id: 1,
+      startTimestamp: 0,
+      tournament: { id: 5 },
+      homeTeam: {},
+      awayTeam: {},
+    };
+    expect(canonicalTournamentName(match)).toBeUndefined();
   });
 });
 

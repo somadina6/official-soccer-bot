@@ -18,7 +18,7 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v16');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v17');
   });
 
   it('uses the player name and authentic kit branding for a goal', () => {
@@ -139,14 +139,14 @@ describe('prompt builder', () => {
     expect(prompt).toContain('#6CADDF');
   });
 
-  it('tells the model to leave the overlay bands calm instead of rendering text itself', () => {
+  it('asks the model to render the scoreboard and player caption directly', () => {
     const prompt = buildEventImagePrompt(base);
-    expect(prompt).not.toContain('"MANCHESTER CITY"');
-    expect(prompt).not.toContain('"ARSENAL"');
-    expect(prompt).not.toContain('"ERLING HAALAND"');
-    expect(prompt).toContain('no text, numbers, or lettering of any kind');
-    expect(prompt).toContain('very top of the frame');
-    expect(prompt).toContain('bottom sixth of the frame');
+    expect(prompt).toContain('"MANCHESTER CITY"');
+    expect(prompt).toContain('"ARSENAL"');
+    expect(prompt).toContain('"1"');
+    expect(prompt).toContain('"0"');
+    expect(prompt).toContain('"GOAL"');
+    expect(prompt).toContain('"ERLING HAALAND"');
+    expect(prompt).toContain("\"12'\"");
   });
-
 });

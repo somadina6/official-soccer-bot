@@ -5,43 +5,77 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v16';
+export const IMAGE_PROMPT_VERSION = 'prompt-v17';
 
 const SHARED_CONSTRAINTS = `
 No duplicate people, distorted limbs, or extra fingers. Kit branding (club
 crests, sponsor marks, league sleeve patches) is allowed. No watermark, and
-no text, numbers, or lettering of any kind anywhere in the image — every
-scoreboard, name, and caption is drawn afterward by a separate deterministic
-process, so any text the model attempts here would only ever be redundant or
-garbled.
+no stray or invented text anywhere in the image beyond what is specified
+below.
 `.trim();
+
+const EVENT_LABELS: Record<MatchEvent['type'], string> = {
+  GOAL: 'GOAL',
+  OWN_GOAL: 'OWN GOAL',
+  RED_CARD: 'RED CARD',
+  PENALTY_MISSED: 'PENALTY MISSED',
+  VAR: 'VAR DECISION',
+  FULL_TIME: 'FULL-TIME',
+};
 
 /**
- * Reserves the space the deterministic Sharp overlay draws into afterward
- * (visual-composer.ts), so the model's own artwork never competes with it.
- * Image-generation models render text as an unreliable visual pattern rather
- * than actual characters — ampersands, long names, and multi-line wraps are
- * the weakest cases — so scoreboard/caption text is always code-drawn now;
- * the model is only asked to leave the right amount of calm, empty space.
+ * Model-rendered scoreboard + caption instructions. Scoped to non-full-time
+ * events only — full-time's score card is entirely code-drawn instead (see
+ * loadFullTimeBackdrop and visual-composer.ts), since it doesn't need a
+ * fresh per-match AI photo the way these events do. Image-generation models
+ * are inherently probabilistic at spelling long strings correctly (long
+ * names, ampersands, multi-line wraps are the weakest cases), so this is a
+ * known, accepted trade-off for these event types — keep an eye on
+ * production output.
  */
-function overlayReserveInstructionsFor(event: MatchEvent): string {
-  const topBand = `
-Leave a plain, uncluttered horizontal band across the very top of the frame,
-about one eighth of the image height, with no important subject detail,
-crests, or graphic elements in it — just a simple, mostly even backdrop. A
-solid scoreboard bar with the team names and score is composited over that
-band afterward.
+function scoreboardInstructionsFor(event: MatchEvent): string {
+  const label = EVENT_LABELS[event.type];
+  const home = event.home.name.toUpperCase();
+  const away = event.away.name.toUpperCase();
+  const requiredStrings = [
+    `"${home}"`,
+    `"${away}"`,
+    `"${event.home.score}"`,
+    `"${event.away.score}"`,
+    `"${label}"`,
+  ];
+
+  let playerBlock = '';
+  if (event.player) {
+    const player = event.player.name.toUpperCase();
+    const minute = minuteLabel(event);
+    playerBlock = `
+2. Near the bottom of the frame, large bold white capital letters reading
+   "${player}" on one line, and directly below it, smaller white text
+   reading "${minute}".
+`;
+    requiredStrings.push(`"${player}"`, `"${minute}"`);
+  }
+
+  return `
+This image MUST include the following text and graphic elements, rendered
+crisply and accurately as part of the composition, not a caption added
+afterward:
+
+1. A solid dark navy bar across the very top of the frame, about one eighth
+   of the image height. On the far left of that bar, the text "${home}" in
+   bold white sans-serif, with the number "${event.home.score}" in large
+   bold white directly beneath it. On the far right of that bar, the text
+   "${away}" in bold white sans-serif, with the number "${event.away.score}"
+   in large bold white directly beneath it. In the exact center of that bar,
+   a white rounded pill outline containing the words "${label}" in bold
+   white capital letters. If a team name is long, wrap it onto two lines
+   rather than letting it overlap the pill.
+${playerBlock}
+Every character in ${requiredStrings.join(', ')} must be spelled correctly,
+letter for letter, legible, and exactly as given above — no invented,
+duplicated, or garbled text anywhere else in the image.
 `.trim();
-
-  if (!event.player) return topBand;
-
-  const bottomBand = `
-Leave the bottom sixth of the frame relatively calm, with no crucial facial
-detail or action right at the very bottom edge. A name and minute caption is
-composited over that area afterward.
-`.trim();
-
-  return `${topBand}\n\n${bottomBand}`;
 }
 
 const CAMERA_STYLE = `
@@ -247,7 +281,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${overlayReserveInstructionsFor(event)}
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -267,7 +301,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${overlayReserveInstructionsFor(event)}
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -285,7 +319,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${overlayReserveInstructionsFor(event)}
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -303,7 +337,7 @@ ${kitLine} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${overlayReserveInstructionsFor(event)}
+${scoreboardInstructionsFor(event)}
 `.trim();
     }
 
@@ -320,7 +354,7 @@ ${bothKitsLine(event)} ${CAMERA_STYLE}
 
 ${SHARED_CONSTRAINTS}
 
-${overlayReserveInstructionsFor(event)}
+${scoreboardInstructionsFor(event)}
 `.trim();
   }
 }

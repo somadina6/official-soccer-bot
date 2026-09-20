@@ -56,6 +56,7 @@ function toTeamSide(raw: unknown, fallbackName: string) {
 type FixtureRow = {
   id: number;
   competition_id: number;
+  competition_name: string | null;
   provider_match_id: number;
   home_team: unknown;
   away_team: unknown;
@@ -66,7 +67,7 @@ async function loadFixture(matchId: string): Promise<FixtureRow | null> {
   const { data, error } = await getSupabase()
     .from("fixtures")
     .select(
-      "id, competition_id, provider_match_id, home_team, away_team, status",
+      "id, competition_id, competition_name, provider_match_id, home_team, away_team, status",
     )
     .eq("provider", "sportsapi-pro")
     .eq("provider_match_id", Number(matchId))
@@ -123,6 +124,7 @@ async function buildContext(matchId: string, fixture: FixtureRow): Promise<Match
   return {
     matchId,
     competitionId: String(fixture.competition_id),
+    competitionName: fixture.competition_name ?? undefined,
     home,
     away,
     scoreKnown: resolved.known,

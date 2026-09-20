@@ -80,7 +80,11 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
       event.type === 'FULL_TIME' ? await loadMatchCrests(event.home.id, event.away.id) : undefined;
     const scorers =
       event.type === 'FULL_TIME' ? await loadFullTimeScorers(fixtureId) : undefined;
-    finalJpeg = await composeEventImage(backgroundImage, event, { scorers, crests });
+    // overlay: false — this pipeline always has a fresh AI photo (or the
+    // cached full-time backdrop), so non-full-time events ask the model to
+    // draw its own scoreboard/caption (see scoreboardInstructionsFor);
+    // full-time ignores this flag and always draws its score card in code.
+    finalJpeg = await composeEventImage(backgroundImage, event, { overlay: false, scorers, crests });
     finalJpeg = await enforceXLimit(finalJpeg);
   } catch (error) {
     const lastErrorCode = errorCodeOf(error);

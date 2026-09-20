@@ -40,6 +40,8 @@ export const MatchEventSchema = z.object({
   matchId: z.string(),
   incidentId: z.string().optional(),
   competitionId: z.string(),
+  /** Real competition name (e.g. "Premier League", "FA Cup") for display. Optional: absent for events normalized before this existed, or when the provider payload didn't carry one. */
+  competitionName: z.string().optional(),
   type: MatchEventTypeSchema,
   status: z.enum(['PROVISIONAL', 'CONFIRMED', 'OVERTURNED']),
   minute: z.number().int().min(0),

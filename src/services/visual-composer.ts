@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { INTER_BOLD_WOFF2_BASE64 } from '../assets/fonts/inter-bold-woff2-base64.js';
+import { INTER_BOLD_TTF_BASE64 } from '../assets/fonts/inter-bold-ttf-base64.js';
 import type { MatchEvent } from '../domain/match-event.js';
 import { ImageFlowError } from '../image-flow/errors.js';
 import { logger } from '../observability/logger.js';
@@ -16,16 +16,22 @@ const OVERLAY_FONT_FAMILY = 'MatchMouthOverlay';
  * Embeds the overlay font directly in the SVG as base64, instead of
  * referencing a system font by name (e.g. "Arial"). The container this runs
  * in (Railway) has no fonts installed, which made every code-drawn overlay
- * text — the full-time scorers list, and previously the scoreboard/caption
- * overlay — render as blank tofu boxes in production even though it looked
- * fine on a dev machine that happens to have system fonts.
+ * text render as blank tofu boxes in production even though it looked fine
+ * on a dev machine that happens to have system fonts.
+ *
+ * Embedded as plain TrueType, not WOFF2: WOFF2 needs a Brotli decompressor
+ * that isn't reliably compiled into every platform's librsvg/Cairo/Pango
+ * build. The WOFF2 version rendered fine locally (macOS) but came out
+ * completely blank in production (Railway/Linux) — no fallback glyphs at
+ * all, not even tofu boxes, because the font failed to load rather than
+ * just missing specific glyphs. Raw TTF has decades of universal support.
  */
 const OVERLAY_FONT_FACE_SVG = `
   <defs>
     <style>
       @font-face {
         font-family: '${OVERLAY_FONT_FAMILY}';
-        src: url(data:font/woff2;base64,${INTER_BOLD_WOFF2_BASE64}) format('woff2');
+        src: url(data:font/ttf;base64,${INTER_BOLD_TTF_BASE64}) format('truetype');
         font-weight: 700;
       }
     </style>
@@ -132,7 +138,6 @@ export type FullTimeScorer = {
   ownGoal: boolean;
 };
 
-const COMPETITION_LABEL = 'PREMIER LEAGUE';
 /** Vertical centre of the crest row, about two thirds down the frame. */
 const CREST_ROW_CENTER_Y = 980;
 const SCORERS_ROW_HEIGHT = 36;
@@ -225,14 +230,23 @@ function fullTimeFadeSvg(): string {
 `;
 }
 
-/** Competition name flanked by thin rules, sitting just above the crest row. */
-function competitionDividerSvg(): string {
+/**
+ * Competition name flanked by thin rules, sitting just above the crest row.
+ * Read from the event, never hardcoded: fixtures.competition_id always
+ * points at the single Premier League row, even for a watched club's cup or
+ * other-competition match (see shouldWatchMatch), so it can't be trusted —
+ * the real name is snapshotted from the raw provider payload instead (see
+ * canonicalTournamentName). Falls back to "PREMIER LEAGUE" only for events
+ * normalized before that existed.
+ */
+function competitionDividerSvg(event: MatchEvent): string {
+  const label = escapeXml(truncateLabel(event.competitionName ?? 'Premier League', 26).toUpperCase());
   const y = CREST_ROW_CENTER_Y - 140;
-  const halfLabelWidth = (COMPETITION_LABEL.length * 15 + 40) / 2;
+  const halfLabelWidth = (label.length * 15 + 40) / 2;
   return `
   <text x="${IMAGE_WIDTH / 2}" y="${y + 6}" text-anchor="middle" ${TEXT_SHADOW_ATTRS}
         font-family="${OVERLAY_FONT_FAMILY}, sans-serif" font-size="22" font-weight="700"
-        fill="#ffffff" letter-spacing="3">${COMPETITION_LABEL}</text>
+        fill="#ffffff" letter-spacing="3">${label}</text>
   <line x1="${BAR_PADDING}" y1="${y}" x2="${IMAGE_WIDTH / 2 - halfLabelWidth}" y2="${y}"
         stroke="#000000" stroke-opacity="0.55" stroke-width="4"/>
   <line x1="${IMAGE_WIDTH / 2 + halfLabelWidth}" y1="${y}" x2="${IMAGE_WIDTH - BAR_PADDING}" y2="${y}"
@@ -282,6 +296,17 @@ function fullTimeScorersSvg(entries: readonly FullTimeScorer[]): string {
 }
 
 export type ComposeEventImageOptions = {
+  /**
+   * Non-full-time events only. Defaults to true: code draws the scoreboard
+   * bar and player caption. The AI image pipeline (image-pipeline.ts) passes
+   * false for events with a fresh per-match photo, asking the model to draw
+   * its own scoreboard/caption instead (see scoreboardInstructionsFor in
+   * prompt-builder.ts) — accepted as probabilistic but avoids paying for the
+   * AI call twice. Callers with no AI photo at all, like the VAR-correction
+   * fallback (post-corrections.ts), rely on the true default since there's
+   * nothing else to draw the text.
+   */
+  overlay?: boolean;
   /** Full-time only: confirmed scorers to list beneath the crest row, in code-rendered text. */
   scorers?: readonly FullTimeScorer[] | undefined;
   /** Full-time only: real crest images to composite in place of the model-drawn crests. */
@@ -290,37 +315,38 @@ export type ComposeEventImageOptions = {
 
 /**
  * Composes the final 1024×1536 JPEG from generated (or fallback) artwork
- * plus a deterministic overlay. The overlay always draws in code — never
- * left to the image model — because model-rendered text is unreliable
- * (garbled ampersands, multi-line wraps, long names); the prompt
- * (prompt-builder.ts) only asks the model to leave the bands this overlay
- * occupies visually calm. Full-time gets its own score-card layout (crest
- * row + centered score + competition line + scorers list); every other
- * event type gets the top scoreboard bar + bottom player caption.
+ * plus an optional deterministic overlay. Full-time gets its own score-card
+ * layout (crest row + centered score + competition line + scorers list),
+ * always code-drawn. Every other event type gets the top scoreboard bar +
+ * bottom player caption only when `overlay` is true (see
+ * ComposeEventImageOptions) — otherwise the model already drew them.
  */
 export async function composeEventImage(
   background: Buffer,
   event: MatchEvent,
   options: ComposeEventImageOptions = {},
 ): Promise<Buffer> {
-  const svgFragments: string[] =
-    event.type === 'FULL_TIME'
-      ? [OVERLAY_FONT_FACE_SVG, fullTimeFadeSvg(), competitionDividerSvg(), fullTimeScoreSvg(event)]
-      : [OVERLAY_FONT_FACE_SVG, scoreboardSvg(event), captionSvg(event)];
-  if (event.type === 'FULL_TIME' && options.scorers?.length) {
-    svgFragments.push(fullTimeScorersSvg(options.scorers));
+  const svgFragments: string[] = [];
+  if (event.type === 'FULL_TIME') {
+    svgFragments.push(OVERLAY_FONT_FACE_SVG, fullTimeFadeSvg(), competitionDividerSvg(event), fullTimeScoreSvg(event));
+    if (options.scorers?.length) svgFragments.push(fullTimeScorersSvg(options.scorers));
+  } else if (options.overlay ?? true) {
+    svgFragments.push(OVERLAY_FONT_FACE_SVG, scoreboardSvg(event), captionSvg(event));
   }
 
   try {
-    const svg = `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-  ${svgFragments.join('\n')}
-</svg>`;
     const crestLayers =
       event.type === 'FULL_TIME' && options.crests ? await crestCompositeLayers(options.crests) : [];
-    const pipeline = sharp(background)
+    let pipeline = sharp(background)
       .rotate()
-      .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' })
-      .composite([...crestLayers, { input: Buffer.from(svg), top: 0, left: 0 }]);
+      .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' });
+    if (svgFragments.length > 0 || crestLayers.length > 0) {
+      const svg = `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  ${svgFragments.join('\n')}
+</svg>`;
+      const layers = svgFragments.length > 0 ? [...crestLayers, { input: Buffer.from(svg), top: 0, left: 0 }] : crestLayers;
+      pipeline = pipeline.composite(layers);
+    }
     const image = await pipeline
       .jpeg({ quality: 85, progressive: true, chromaSubsampling: '4:4:4' })
       .toBuffer();
