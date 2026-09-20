@@ -143,6 +143,29 @@ export async function fetchMatchIncidents(matchId: string): Promise<unknown> {
   return sportsGet<unknown>(`/match/${matchId}/incidents`);
 }
 
+/**
+ * Raw team crest/badge image bytes. Unlike every other endpoint here, this
+ * one responds with the image itself (verified against the live API:
+ * `image/png`, not a JSON wrapper with a URL field), so it can't go through
+ * `sportsGet`.
+ */
+export async function fetchTeamCrestImage(teamId: string): Promise<Buffer> {
+  const env = loadEnv();
+  const path = `/teams/${teamId}/image`;
+  const startedAt = Date.now();
+  logger.info({ path }, 'SportsAPI GET');
+  const response = await fetch(`${env.SPORTSAPI_BASE_URL}${path}`, {
+    headers: { 'x-api-key': env.SPORTSAPI_KEY },
+  });
+  const durationMs = Date.now() - startedAt;
+  if (!response.ok) {
+    logger.info({ path, status: response.status, durationMs }, 'SportsAPI GET failed');
+    throw new Error(`SportsAPI ${response.status}: ${path}`);
+  }
+  logger.info({ path, status: response.status, durationMs }, 'SportsAPI GET completed');
+  return Buffer.from(await response.arrayBuffer());
+}
+
 /** Season ids with available statistics for a player; used to resolve the current season for a tournament. */
 export async function fetchPlayerStatisticsSeasons(playerId: string): Promise<unknown> {
   return sportsGet<unknown>(`/players/${playerId}/statistics/seasons`);

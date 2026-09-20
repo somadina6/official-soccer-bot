@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { MatchEvent } from '../domain/match-event.js';
 import { logger } from '../observability/logger.js';
+import { loadMatchCrests } from '../services/crests.js';
+import { loadFullTimeBackdrop } from '../services/full-time-backdrop.js';
 import { loadFullTimeScorers } from '../services/scorers.js';
 import { composeEventImage } from '../services/visual-composer.js';
 import { storeArtwork } from '../supabase/storage.js';
@@ -62,15 +64,23 @@ export async function prepareEventImage(input: PrepareEventImageInput): Promise<
   let generationDurationMs: number | null = null;
 
   try {
-    const prompt = buildEventImagePrompt(event);
-    const generated = await generateEventArtwork(prompt);
-    generationDurationMs = generated.durationMs;
-    await validateGenerated(generated.image);
+    let backgroundImage: Buffer;
+    if (event.type === 'FULL_TIME') {
+      backgroundImage = await loadFullTimeBackdrop();
+    } else {
+      const prompt = buildEventImagePrompt(event);
+      const generated = await generateEventArtwork(prompt);
+      generationDurationMs = generated.durationMs;
+      await validateGenerated(generated.image);
+      backgroundImage = generated.image;
+    }
 
     await updateImageJob(job.id, { status: 'compositing' });
+    const crests =
+      event.type === 'FULL_TIME' ? await loadMatchCrests(event.home.id, event.away.id) : undefined;
     const scorers =
       event.type === 'FULL_TIME' ? await loadFullTimeScorers(fixtureId) : undefined;
-    finalJpeg = await composeEventImage(generated.image, event, { scorers });
+    finalJpeg = await composeEventImage(backgroundImage, event, { scorers, crests });
     finalJpeg = await enforceXLimit(finalJpeg);
   } catch (error) {
     const lastErrorCode = errorCodeOf(error);

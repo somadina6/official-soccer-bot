@@ -12,6 +12,24 @@ function isAlreadyExists(error: { message?: string; statusCode?: string | number
   return status === '409' || /already exists|duplicate/i.test(error.message ?? '');
 }
 
+async function uploadObject(objectPath: string, image: Buffer, contentType: string): Promise<string> {
+  const { error } = await getSupabase()
+    .storage.from(bucket())
+    .upload(objectPath, image, {
+      contentType,
+      cacheControl: '31536000',
+      upsert: false,
+    });
+
+  if (error && !isAlreadyExists(error)) {
+    throw new ImageFlowError('STORAGE_UPLOAD_FAILED', error.message);
+  }
+  if (error) {
+    logger.info({ objectPath }, 'storage object already exists; reusing');
+  }
+  return objectPath;
+}
+
 /**
  * Uploads the finalized JPEG to an immutable, versioned path. `upsert: false`
  * so a duplicate-object response reuses the existing object instead of
@@ -21,21 +39,17 @@ export async function storeArtwork(params: {
   objectPath: string;
   image: Buffer;
 }): Promise<string> {
-  const { error } = await getSupabase()
-    .storage.from(bucket())
-    .upload(params.objectPath, params.image, {
-      contentType: 'image/jpeg',
-      cacheControl: '31536000',
-      upsert: false,
-    });
+  return uploadObject(params.objectPath, params.image, 'image/jpeg');
+}
 
-  if (error && !isAlreadyExists(error)) {
-    throw new ImageFlowError('STORAGE_UPLOAD_FAILED', error.message);
-  }
-  if (error) {
-    logger.info({ objectPath: params.objectPath }, 'storage object already exists; reusing');
-  }
-  return params.objectPath;
+/**
+ * Caches a team crest PNG fetched from SportsAPI, under the same bucket as
+ * generated artwork (`crests/{teamId}.png` — see loadTeamCrest). Crests
+ * don't change shape often enough to need invalidation, so a cache hit is
+ * permanent, same as storeArtwork.
+ */
+export async function storeCrest(params: { objectPath: string; image: Buffer }): Promise<string> {
+  return uploadObject(params.objectPath, params.image, 'image/png');
 }
 
 /** Downloads a previously stored JPEG for X re-upload without regenerating. */

@@ -78,4 +78,32 @@ describe('visual composer', () => {
       composeEventImage(background, fullTime, { scorers: [] }),
     ).resolves.toBeInstanceOf(Buffer);
   });
+
+  async function crestPng(color: { r: number; g: number; b: number }): Promise<Buffer> {
+    return sharp({ create: { width: 64, height: 64, channels: 3, background: color } })
+      .png()
+      .toBuffer();
+  }
+
+  it('composites both real crests when provided', async () => {
+    const background = await solidFallbackBackground(['#0057B8', '#EF0107']);
+    const fullTime = { ...event, type: 'FULL_TIME' as const };
+    const crests = {
+      home: await crestPng({ r: 0, g: 87, b: 184 }),
+      away: await crestPng({ r: 239, g: 1, b: 7 }),
+    };
+    const image = await composeEventImage(background, fullTime, { crests });
+    const meta = await sharp(image).metadata();
+    expect(meta.format).toBe('jpeg');
+    expect(meta.width).toBe(IMAGE_WIDTH);
+  });
+
+  it('composites whichever crest resolved when only one side is available', async () => {
+    const background = await solidFallbackBackground([]);
+    const fullTime = { ...event, type: 'FULL_TIME' as const };
+    const crests = { home: await crestPng({ r: 10, g: 20, b: 30 }), away: null };
+    const image = await composeEventImage(background, fullTime, { crests });
+    const meta = await sharp(image).metadata();
+    expect(meta.format).toBe('jpeg');
+  });
 });

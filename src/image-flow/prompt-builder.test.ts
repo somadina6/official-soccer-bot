@@ -18,7 +18,7 @@ const base: MatchEvent = {
 
 describe('prompt builder', () => {
   it('pins a versioned prompt identifier', () => {
-    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v14');
+    expect(IMAGE_PROMPT_VERSION).toBe('prompt-v16');
   });
 
   it('uses the player name and authentic kit branding for a goal', () => {
@@ -60,8 +60,11 @@ describe('prompt builder', () => {
     expect(buildEventImagePrompt({ ...base, type: 'RED_CARD' })).toContain('sending-off');
     expect(buildEventImagePrompt({ ...base, type: 'PENALTY_MISSED' })).toContain('missed penalty');
     expect(buildEventImagePrompt({ ...base, type: 'VAR' })).toContain('video review');
-    expect(buildEventImagePrompt({ ...base, type: 'FULL_TIME' })).toContain('Full-time result graphic');
     expect(buildEventImagePrompt({ ...base, type: 'OWN_GOAL' })).toContain('anguish and disbelief');
+  });
+
+  it('throws for FULL_TIME, which is composited separately (see loadFullTimeBackdrop)', () => {
+    expect(() => buildEventImagePrompt({ ...base, type: 'FULL_TIME' })).toThrow(/FULL_TIME/);
   });
 
   it('credits the own goal to the benefiting side, not the scorer\'s side', () => {
@@ -102,17 +105,11 @@ describe('prompt builder', () => {
     expect(goAhead).toContain('own goal puts Manchester City ahead 2-1');
   });
 
-  it('names both clubs on VAR and full-time prompts', () => {
+  it('names both clubs on the VAR prompt', () => {
     const varPrompt = buildEventImagePrompt({ ...base, type: 'VAR' });
     expect(varPrompt).toContain('Manchester City');
     expect(varPrompt).toContain('Arsenal');
     expect(varPrompt).toContain('club crests');
-
-    const fullTime = buildEventImagePrompt({ ...base, type: 'FULL_TIME' });
-    expect(fullTime).toContain('Manchester City');
-    expect(fullTime).toContain('Arsenal');
-    expect(fullTime).toContain('club crest');
-    expect(fullTime).toContain('no players, no people');
   });
 
   it('describes stoppage-time drama when a stoppage minute is present', () => {
@@ -142,26 +139,6 @@ describe('prompt builder', () => {
     expect(prompt).toContain('#6CADDF');
   });
 
-  it('varies the full-time mood with the scoreline margin', () => {
-    const draw = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 1 }, away: { ...base.away, score: 1 } });
-    expect(draw).toContain('ends level');
-
-    const rout = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 4 }, away: { ...base.away, score: 0 } });
-    expect(rout).toContain('dominant, one-sided');
-
-    const narrow = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 2 }, away: { ...base.away, score: 1 } });
-    expect(narrow).toContain('narrowly decided');
-  });
-
-  it('shows both crests and no players, with no scoreline text asked of the model', () => {
-    const prompt = buildEventImagePrompt({ ...base, type: 'FULL_TIME', home: { ...base.home, score: 2 }, away: { ...base.away, score: 1 } });
-    expect(prompt).toContain('#6CADDF');
-    expect(prompt).not.toContain('celebrating');
-    expect(prompt).not.toContain('"2 - 1"');
-    expect(prompt).not.toContain('"2"');
-    expect(prompt).not.toContain('"MANCHESTER CITY"');
-  });
-
   it('tells the model to leave the overlay bands calm instead of rendering text itself', () => {
     const prompt = buildEventImagePrompt(base);
     expect(prompt).not.toContain('"MANCHESTER CITY"');
@@ -172,9 +149,4 @@ describe('prompt builder', () => {
     expect(prompt).toContain('bottom sixth of the frame');
   });
 
-  it('omits the bottom-band reserve for full-time, even if a player happens to be set', () => {
-    const prompt = buildEventImagePrompt({ ...base, type: 'FULL_TIME' });
-    expect(prompt).not.toContain('ERLING HAALAND');
-    expect(prompt).not.toContain('bottom sixth of the frame');
-  });
 });

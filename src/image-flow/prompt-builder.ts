@@ -5,7 +5,7 @@ import type { MatchEvent } from '../domain/match-event.js';
  * persisted on the image job and baked into the immutable storage path, so a
  * wording change never silently overwrites previously generated artwork.
  */
-export const IMAGE_PROMPT_VERSION = 'prompt-v14';
+export const IMAGE_PROMPT_VERSION = 'prompt-v16';
 
 const SHARED_CONSTRAINTS = `
 No duplicate people, distorted limbs, or extra fingers. Kit branding (club
@@ -25,11 +25,6 @@ garbled.
  * the model is only asked to leave the right amount of calm, empty space.
  */
 function overlayReserveInstructionsFor(event: MatchEvent): string {
-  // Full-time's reserved bands (crest gap, bottom quarter) live in
-  // FULL_TIME_CONSTRAINTS instead, since they're specific to its score-card
-  // layout rather than the shared top-bar-and-caption layout below.
-  if (event.type === 'FULL_TIME') return '';
-
   const topBand = `
 Leave a plain, uncluttered horizontal band across the very top of the frame,
 about one eighth of the image height, with no important subject detail,
@@ -142,32 +137,6 @@ function bothKitsLine(event: MatchEvent): string {
   return `Players wearing authentic ${event.home.name} kits${coloursLineFor(event.home)} against ${event.away.name} kits${coloursLineFor(event.away)}, club crests, sponsor logos, and league badges visible.`;
 }
 
-function crestLineFor(side: MatchEvent['home']): string {
-  return `${side.name} club crest${coloursLineFor(side)}`;
-}
-
-/**
- * Full-time is a score-card graphic, not a photo. Everything but the crests
- * and backdrop art is drawn afterward by code (visual-composer.ts): the
- * score sits in a gap the model leaves between the crests, and a
- * competition-name divider plus the scorers list sit above and below that
- * row. The model only supplies backdrop art and the two crests, and must
- * keep those three bands visually calm.
- */
-const FULL_TIME_CONSTRAINTS = `
-No players, no people, no photographs of humans in the backdrop art. Crests
-must not be duplicated, invented beyond the two named clubs, or distorted.
-No watermark, and no text, numbers, or lettering of any kind anywhere in the
-image — the competition name, score, and scorers list are all drawn
-afterward by a separate deterministic process. Arrange the two crests in a
-single horizontal row about two thirds of the way down the frame, and leave
-a clear vertical gap about one sixth of the image width directly between
-them — no crest detail, divider bar, or texture in that gap — for a
-scoreline to be composited there. Leave the bottom quarter of the frame,
-below that crest row, visually calm and uncluttered, since a scorers list is
-composited over that region afterward.
-`.trim();
-
 function subjectFor(event: MatchEvent): string {
   return event.player?.name ?? 'a football player';
 }
@@ -247,8 +216,17 @@ function goalContextLineFor(event: MatchEvent): string {
     : ` The goal extends ${beneficiary.name}'s lead to ${beneficiary.score}-${opponent.score}.`;
 }
 
-/** Builds the photorealistic editorial prompt for one confirmed event. */
+/**
+ * Builds the photorealistic editorial prompt for one confirmed event.
+ * Not for FULL_TIME: that event has no match-specific photo at all anymore
+ * — see loadFullTimeBackdrop (services/full-time-backdrop.ts) for its
+ * generic, once-a-day cached backdrop, and visual-composer.ts for how the
+ * real crests, score, and scorers list get composited onto it.
+ */
 export function buildEventImagePrompt(event: MatchEvent): string {
+  if (event.type === 'FULL_TIME') {
+    throw new Error('buildEventImagePrompt does not handle FULL_TIME — see loadFullTimeBackdrop');
+  }
   const player = subjectFor(event);
   const kitLine = kitLineFor(event);
   const momentLine = momentLineFor(event);
@@ -344,30 +322,5 @@ ${SHARED_CONSTRAINTS}
 
 ${overlayReserveInstructionsFor(event)}
 `.trim();
-
-    case 'FULL_TIME': {
-      const margin = Math.abs(event.home.score - event.away.score);
-      const moodLine =
-        event.home.score === event.away.score
-          ? 'The match ends level, a hard-fought, evenly shared result.'
-          : margin >= 3
-            ? 'A dominant, one-sided final scoreline.'
-            : 'A close result, narrowly decided.';
-      return `
-Vertical portrait orientation. Full-time result graphic, no players, no people,
-no photographs of humans. Clean, modern, cinematic sports broadcast graphic
-style: the ${crestLineFor(event.home)} on the left facing the
-${crestLineFor(event.away)} on the right, arranged in a single horizontal row
-about two thirds of the way down the frame, set against a subtly blurred,
-floodlit stadium backdrop with punchy contemporary colour grading. Balanced,
-centered composition with clear space around each crest.
-
-${moodLine}
-
-${FULL_TIME_CONSTRAINTS}
-
-${overlayReserveInstructionsFor(event)}
-`.trim();
-    }
   }
 }

@@ -133,9 +133,47 @@ export type FullTimeScorer = {
 };
 
 const COMPETITION_LABEL = 'PREMIER LEAGUE';
-/** Vertical centre of the crest row the prompt asks the model to draw (see FULL_TIME_CONSTRAINTS) — about two thirds down the frame. */
+/** Vertical centre of the crest row, about two thirds down the frame. */
 const CREST_ROW_CENTER_Y = 980;
 const SCORERS_ROW_HEIGHT = 36;
+
+/** Real crest images, when available (see loadMatchCrests in services/crests.ts). */
+export type FullTimeCrests = {
+  home: Buffer | null;
+  away: Buffer | null;
+};
+
+const CREST_BOX_SIZE = 240;
+const CREST_CENTER_Y = CREST_ROW_CENTER_Y - 110;
+const CREST_CENTER_OFFSET_X = 300;
+
+/** Resizes a fetched crest to fit inside a fixed square box, preserving aspect ratio on a transparent backdrop. */
+async function fitCrestToBox(image: Buffer): Promise<Buffer> {
+  return sharp(image)
+    .resize(CREST_BOX_SIZE, CREST_BOX_SIZE, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Raster composite entries placing real crests in fixed left/right slots of
+ * the crest row, leaving the middle third clear for the code-drawn score.
+ * Real crests are always positioned deterministically, and each side is
+ * composited independently — the backdrop no longer has a model-drawn
+ * crest to fall back on (see loadFullTimeBackdrop), so a lone crest fetch
+ * failure just leaves that one slot empty rather than losing both.
+ */
+async function crestCompositeLayers(
+  crests: FullTimeCrests,
+): Promise<sharp.OverlayOptions[]> {
+  const top = Math.round(CREST_CENTER_Y - CREST_BOX_SIZE / 2);
+  const homeLeft = Math.round(IMAGE_WIDTH / 2 - CREST_CENTER_OFFSET_X - CREST_BOX_SIZE / 2);
+  const awayLeft = Math.round(IMAGE_WIDTH / 2 + CREST_CENTER_OFFSET_X - CREST_BOX_SIZE / 2);
+  const layers: sharp.OverlayOptions[] = [];
+  if (crests.home) layers.push({ input: await fitCrestToBox(crests.home), top, left: homeLeft });
+  if (crests.away) layers.push({ input: await fitCrestToBox(crests.away), top, left: awayLeft });
+  return layers;
+}
 
 /** "Pascal Groß" → "P. GROSS", broadcast-style — first initial plus every word after it. */
 function scorerSurnameLabel(name: string): string {
@@ -165,14 +203,21 @@ const TEXT_SHADOW_ATTRS = 'paint-order="stroke" stroke="#000000" stroke-opacity=
  * bottom third reads as a coherent panel even before the per-letter outline
  * kicks in — the same role a broadcast graphic's solid panel plays, but as
  * a soft gradient since there's no hard-edged card here.
+ *
+ * Starts well above the crest row (not just at its edge) because the model
+ * doesn't reliably obey "no text" / "no crests" instructions — it will
+ * sometimes draw its own stray headline or invented badge just above the
+ * reserved band. Fading from further up gives that failure mode less clean
+ * space to land in, on top of it being covered outright wherever it overlaps
+ * the real composited crests.
  */
 function fullTimeFadeSvg(): string {
-  const fadeTop = CREST_ROW_CENTER_Y - 220;
+  const fadeTop = CREST_ROW_CENTER_Y - 380;
   return `
   <defs>
     <linearGradient id="ft-fade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#05070d" stop-opacity="0.15"/>
-      <stop offset="30%" stop-color="#05070d" stop-opacity="0.6"/>
+      <stop offset="0%" stop-color="#05070d" stop-opacity="0.3"/>
+      <stop offset="40%" stop-color="#05070d" stop-opacity="0.65"/>
       <stop offset="100%" stop-color="#05070d" stop-opacity="0.94"/>
     </linearGradient>
   </defs>
@@ -239,6 +284,8 @@ function fullTimeScorersSvg(entries: readonly FullTimeScorer[]): string {
 export type ComposeEventImageOptions = {
   /** Full-time only: confirmed scorers to list beneath the crest row, in code-rendered text. */
   scorers?: readonly FullTimeScorer[] | undefined;
+  /** Full-time only: real crest images to composite in place of the model-drawn crests. */
+  crests?: FullTimeCrests | undefined;
 };
 
 /**
@@ -268,10 +315,12 @@ export async function composeEventImage(
     const svg = `<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   ${svgFragments.join('\n')}
 </svg>`;
+    const crestLayers =
+      event.type === 'FULL_TIME' && options.crests ? await crestCompositeLayers(options.crests) : [];
     const pipeline = sharp(background)
       .rotate()
       .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: 'cover', position: 'attention' })
-      .composite([{ input: Buffer.from(svg), top: 0, left: 0 }]);
+      .composite([...crestLayers, { input: Buffer.from(svg), top: 0, left: 0 }]);
     const image = await pipeline
       .jpeg({ quality: 85, progressive: true, chromaSubsampling: '4:4:4' })
       .toBuffer();
