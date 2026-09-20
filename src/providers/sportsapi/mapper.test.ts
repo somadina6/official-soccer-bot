@@ -46,9 +46,31 @@ describe('normalizeIncident', () => {
     expect(event!.status).toBe('PROVISIONAL');
     expect(event!.minute).toBe(85);
     expect(event!.home.score).toBe(2);
-    expect(event!.player).toEqual({ id: '790864', name: 'Levente Szabó' });
-    expect(event!.assist).toEqual({ id: '190911', name: 'Josip Ćorluka' });
+    expect(event!.player).toEqual({ id: '790864', name: 'Levente Szabó', side: 'home' });
+    expect(event!.assist).toEqual({ id: '190911', name: 'Josip Ćorluka', side: 'home' });
     expect(event!.incidentId).toBe('357835369');
+  });
+
+  it('inverts isHome for an own goal, since it tracks the benefiting side, not the scorer\'s club', () => {
+    // Real payload shape (Brighton home vs Aston Villa away): Lindelöf (Aston
+    // Villa, away) put through his own net, crediting Brighton — the
+    // provider sends isHome=true for that, matching the benefiting home
+    // side, not the away scorer.
+    const event = normalizeIncident(
+      {
+        id: 1,
+        incidentType: 'goal',
+        incidentClass: 'ownGoal',
+        time: 30,
+        isHome: true,
+        player: { id: 99, name: 'Victor Lindelöf' },
+        homeScore: 1,
+        awayScore: 0,
+      },
+      context,
+    );
+    expect(event!.type).toBe('OWN_GOAL');
+    expect(event!.player).toEqual({ id: '99', name: 'Victor Lindelöf', side: 'away' });
   });
 
   it('carries the context competition name onto the event, when present', () => {

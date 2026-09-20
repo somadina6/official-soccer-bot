@@ -149,11 +149,15 @@ function pick<T>(items: readonly T[], seed: number): T {
 }
 
 /**
- * The normalized event does not attribute the player to a side, so the kit
- * is a best-effort heuristic: a goal is credited to the side the scoreboard
- * currently favours (mirrors the retired background-mood logic).
+ * The scorer's own club, for kit colours — always the club he actually
+ * plays for, whether or not the goal counts in his own net. Prefers the
+ * real `player.side` (from the provider's `isHome` flag); falls back to a
+ * scoreline heuristic only for events normalized before that field existed.
  */
 function kitSideFor(event: MatchEvent): MatchEvent['home'] {
+  if (event.player?.side) {
+    return event.player.side === 'home' ? event.home : event.away;
+  }
   const homeFavoured = event.home.score >= event.away.score;
   return event.type === 'OWN_GOAL' ? (homeFavoured ? event.away : event.home) : homeFavoured ? event.home : event.away;
 }

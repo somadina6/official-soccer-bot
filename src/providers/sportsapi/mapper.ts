@@ -307,15 +307,33 @@ export function normalizeIncident(raw: unknown, context: MatchContext): MatchEve
   ) {
     event.stoppageMinute = incident.addedTime;
   }
+  // `isHome` tracks which side the incident counts toward on the scoreboard.
+  // For a GOAL/RED_CARD/etc. that's the same as the player's own club, but
+  // for an OWN_GOAL the benefiting side is the *opponent* of the scorer, so
+  // the player's real side is the inverse of isHome — confirmed against
+  // stored provider payloads (e.g. an Aston Villa player's own goal arrives
+  // with isHome=true because the goal is credited to the home side).
+  const benefitingSide = incident.isHome === true ? 'home' : incident.isHome === false ? 'away' : undefined;
+  const scorerSide =
+    benefitingSide && type === 'OWN_GOAL'
+      ? benefitingSide === 'home'
+        ? 'away'
+        : 'home'
+      : benefitingSide;
   if (incident.player) {
-    event.player = incident.player.id !== undefined
-      ? { id: String(incident.player.id), name: incident.player.name }
-      : { name: incident.player.name };
+    event.player = {
+      ...(incident.player.id !== undefined ? { id: String(incident.player.id) } : {}),
+      name: incident.player.name,
+      ...(scorerSide ? { side: scorerSide } : {}),
+    };
   }
   if (assist) {
-    event.assist = assist.id !== undefined
-      ? { id: String(assist.id), name: assist.name }
-      : { name: assist.name };
+    event.assist = {
+      ...(assist.id !== undefined ? { id: String(assist.id) } : {}),
+      name: assist.name,
+      // The assist always comes from the scorer's own side (never an opponent, and own goals have no assist).
+      ...(scorerSide ? { side: scorerSide } : {}),
+    };
   }
   return event;
 }

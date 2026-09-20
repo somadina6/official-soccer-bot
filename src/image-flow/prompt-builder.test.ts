@@ -134,6 +134,29 @@ describe('prompt builder', () => {
     expect(prompt).not.toContain('supplied the assist');
   });
 
+  it('kits the scorer in their real club colours even when the scoreboard favours the other side', () => {
+    // Away side (Arsenal) player scores, levelling the score at 1-1 — the
+    // scoreline-favoured heuristic would wrongly pick the home kit here.
+    const prompt = buildEventImagePrompt({
+      ...base,
+      player: { name: 'Bukayo Saka', side: 'away' },
+      home: { ...base.home, score: 1 },
+      away: { ...base.away, score: 1 },
+    });
+    expect(prompt).toContain('Arsenal match kit');
+    expect(prompt).not.toContain('Manchester City match kit');
+  });
+
+  it('kits an own-goal scorer in their own club colours, not the benefiting side', () => {
+    const prompt = buildEventImagePrompt({
+      ...base,
+      type: 'OWN_GOAL',
+      player: { name: 'William Saliba', side: 'away' },
+    });
+    expect(prompt).toContain('Arsenal match kit');
+    expect(prompt).not.toContain('Manchester City match kit');
+  });
+
   it('weaves the team colours into the kit description', () => {
     const prompt = buildEventImagePrompt(base);
     expect(prompt).toContain('#6CADDF');

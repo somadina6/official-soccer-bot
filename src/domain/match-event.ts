@@ -49,8 +49,15 @@ export const MatchEventSchema = z.object({
   occurredAt: z.string(),
   home: TeamSideSchema,
   away: TeamSideSchema,
-  player: z.object({ id: z.string().optional(), name: z.string() }).optional(),
-  assist: z.object({ id: z.string().optional(), name: z.string() }).optional(),
+  /**
+   * `side` is which club the player actually turns out for (from the
+   * provider's `isHome` flag), independent of which side the incident
+   * counts toward on the scoreboard — the two diverge for an own goal.
+   * Optional because older stored events were normalized before this field
+   * existed, or the provider payload omitted `isHome`.
+   */
+  player: z.object({ id: z.string().optional(), name: z.string(), side: z.enum(['home', 'away']).optional() }).optional(),
+  assist: z.object({ id: z.string().optional(), name: z.string(), side: z.enum(['home', 'away']).optional() }).optional(),
   rawPayloadHash: z.string(),
   /**
    * False when the current scoreline could not be reliably resolved (e.g. a
