@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { INTER_BOLD_TTF_BASE64 } from '../assets/fonts/inter-bold-ttf-base64.js';
 import type { MatchEvent } from '../domain/match-event.js';
 import { ImageFlowError } from '../image-flow/errors.js';
 import { logger } from '../observability/logger.js';
@@ -10,33 +9,18 @@ import { logger } from '../observability/logger.js';
 export const IMAGE_WIDTH = 1024;
 export const IMAGE_HEIGHT = 1536;
 
-const OVERLAY_FONT_FAMILY = 'MatchMouthOverlay';
-
 /**
- * Embeds the overlay font directly in the SVG as base64, instead of
- * referencing a system font by name (e.g. "Arial"). The container this runs
- * in (Railway) has no fonts installed, which made every code-drawn overlay
- * text render as blank tofu boxes in production even though it looked fine
- * on a dev machine that happens to have system fonts.
- *
- * Embedded as plain TrueType, not WOFF2: WOFF2 needs a Brotli decompressor
- * that isn't reliably compiled into every platform's librsvg/Cairo/Pango
- * build. The WOFF2 version rendered fine locally (macOS) but came out
- * completely blank in production (Railway/Linux) — no fallback glyphs at
- * all, not even tofu boxes, because the font failed to load rather than
- * just missing specific glyphs. Raw TTF has decades of universal support.
+ * A real installed system font, not an embedded custom one. Two different
+ * embedding strategies (WOFF2 @font-face, then plain TTF @font-face) both
+ * rendered perfectly on a dev machine but shipped garbled/blank text in
+ * production (Railway) — Cairo/Pango's font backend apparently can't
+ * reliably initialize an embedded @font-face at all in that container,
+ * regardless of format. `fonts-dejavu-core` + `fontconfig` are installed at
+ * runtime via railpack.json, giving Cairo/Pango an actual font file on disk
+ * to discover — the standard, well-tested fix for this class of bug in
+ * fontless Docker/container environments.
  */
-const OVERLAY_FONT_FACE_SVG = `
-  <defs>
-    <style>
-      @font-face {
-        font-family: '${OVERLAY_FONT_FAMILY}';
-        src: url(data:font/ttf;base64,${INTER_BOLD_TTF_BASE64}) format('truetype');
-        font-weight: 700;
-      }
-    </style>
-  </defs>
-`;
+const OVERLAY_FONT_FAMILY = 'DejaVu Sans';
 
 const EVENT_LABELS: Record<MatchEvent['type'], string> = {
   GOAL: 'GOAL',
@@ -328,10 +312,10 @@ export async function composeEventImage(
 ): Promise<Buffer> {
   const svgFragments: string[] = [];
   if (event.type === 'FULL_TIME') {
-    svgFragments.push(OVERLAY_FONT_FACE_SVG, fullTimeFadeSvg(), competitionDividerSvg(event), fullTimeScoreSvg(event));
+    svgFragments.push(fullTimeFadeSvg(), competitionDividerSvg(event), fullTimeScoreSvg(event));
     if (options.scorers?.length) svgFragments.push(fullTimeScorersSvg(options.scorers));
   } else if (options.overlay ?? true) {
-    svgFragments.push(OVERLAY_FONT_FACE_SVG, scoreboardSvg(event), captionSvg(event));
+    svgFragments.push(scoreboardSvg(event), captionSvg(event));
   }
 
   try {
